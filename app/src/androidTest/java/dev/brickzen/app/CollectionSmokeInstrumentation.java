@@ -7,14 +7,12 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.RectF;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.MotionEvent;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
@@ -73,6 +71,8 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
             testSuccessfulRoundTrip();
             progress("Success and duplicate-result checks passed; verifying cancellation");
             testCancelledRoundTrip();
+            progress("Cancellation continues automatically; verifying defeated encounter also returns");
+            testFailedRoundTrip();
         } catch (Throwable error) {
             failure = error;
             result.putString("failure", Log.getStackTraceString(error));
@@ -150,48 +150,48 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
         long deadline = SystemClock.elapsedRealtime() + 45000;
         long nextProgress = 0;
         boolean won = false;
-        int upgradesSelected = 0;
         while (SystemClock.elapsedRealtime() < deadline) {
             Integer state = onMain(() -> {
-                if (starEngine.phase == io.github.jeremyjia.stardrift.GameEngine.Phase.UPGRADE) {
-                    starEngine.chooseUpgrade(0);
-                    starView.invalidate();
-                    return 1;
-                }
+                check(starEngine.phase!=io.github.jeremyjia.stardrift.GameEngine.Phase.UPGRADE,"Short encounter never opens an upgrade dialog");
+                float angle=starEngine.time*1.3f;
+                starEngine.setTarget(200+(float)Math.sin(angle)*140,starEngine.height*.55f+(float)Math.cos(angle)*180);
+                if(starEngine.pulseCharge>=.999f && starEngine.enemies.size()>3)starEngine.pulse();
                 if (starEngine.phase == io.github.jeremyjia.stardrift.GameEngine.Phase.WON) return 2;
                 if (starEngine.phase == io.github.jeremyjia.stardrift.GameEngine.Phase.LOST) return 3;
                 return 0;
             });
-            if (state == 1) upgradesSelected++;
             if (state == 2) { won = true; break; }
-            check(state != 3, "Stationary pilot unexpectedly died during the short introductory challenge");
+            check(state != 3, "Moving pilot failed the reward encounter");
             if (SystemClock.elapsedRealtime() >= nextProgress) {
                 String status = onMain(() -> "Star challenge running: " + Math.round(starEngine.time)
-                        + "/30 s, level=" + starEngine.level + ", hp=" + Math.round(starEngine.hp));
+                        + "/30 s, wave="+starEngine.getWave()+", level=" + starEngine.level + ", kills="+Math.round(starEngine.kills)+", hp=" + Math.round(starEngine.hp));
                 progress(status); nextProgress = SystemClock.elapsedRealtime() + 5000;
             }
             SystemClock.sleep(100);
         }
         check(won, "Real draw-loop challenge did not finish within 45 seconds");
         check(onMain(() -> !starEngine.bossSpawned && starEngine.time == 30), "Challenge completed without a boss at exactly 30 seconds");
-        result.putInt("upgrades_selected", upgradesSelected);
+        check(onMain(()->starEngine.level>1),"Automatic upgrades occurred without test input");
         result.putFloat("challenge_seconds", onMain(() -> starEngine.time));
         screenshot(starView, "star-complete.png");
         int expectedReward = onMain(() -> Math.min(3000, Math.round(starEngine.score * .5f) + 500));
-        onMain(() -> { tapGameButton(starView, "finishBonus"); return null; });
+        // No finish/claim/resume tap: production code must return and continue by itself.
         awaitBrickResult(frozen.portalId);
         onMain(() -> {
-            frozen.verifyPhysicalState(brickActivity.game.engine);
+            GameEngine checkpoint=GameEngine.fromSnapshot(brickActivity.game.prefs.getString(MainActivity.PORTAL_SNAPSHOT,null));
+            check(checkpoint!=null,"Completion checkpoint exists");frozen.verifyPhysicalState(checkpoint);
+            check(checkpoint.score==frozen.score+expectedReward,"Computed reward was persisted before play continued");
             GameEngine engine = brickActivity.game.engine;
-            check(engine.score == frozen.score + expectedReward, "Displayed reward returned to the original level");
-            check(!engine.portalActive && !engine.portalPending && engine.state == GameEngine.State.PAUSED, "Returned level remains paused");
-            check(engine.wideUntil >= engine.time + 14 && engine.charge == 1, "Survival awards WIDE and full charge");
+            check(!engine.portalActive && !engine.portalPending && engine.state == GameEngine.State.PLAYING, "Returned level continues without a resume dialog");
+            check(engine.wideUntil >= frozen.time + 14 && engine.charge == 1, "Survival awards WIDE and full charge");
+            int scoreBeforeReplay=engine.score;
             Intent duplicate = new Intent().putExtra("portal_id", frozen.portalId).putExtra("bonus_score", expectedReward)
                     .putExtra("survived", true).putExtra("cancelled", false);
             brickActivity.onActivityResult(MainActivity.STAR_PORTAL_REQUEST, Activity.RESULT_OK, duplicate);
-            check(engine.score == frozen.score + expectedReward, "Duplicate activity result cannot award twice");
+            check(engine.score == scoreBeforeReplay, "Duplicate activity result cannot award twice");
             return null;
         });
+        await("Ball moves after automatic return",2000,()->onMain(()->brickActivity.game.engine.time>frozen.time+.1f));
         screenshot(brickActivity.game, "brick-return.png");
         result.putBoolean("success_round_trip", true);
         result.putInt("awarded_score", expectedReward);
@@ -208,13 +208,31 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
         awaitBrickResult(frozen.portalId);
         onMain(() -> {
             GameEngine engine = brickActivity.game.engine;
-            frozen.verifyPhysicalState(engine);
-            check(engine.score == frozen.score && !engine.portalActive && engine.state == GameEngine.State.PAUSED,
-                    "Cancellation keeps original score and paused level");
+            GameEngine checkpoint=GameEngine.fromSnapshot(brickActivity.game.prefs.getString(MainActivity.PORTAL_SNAPSHOT,null));
+            check(checkpoint!=null,"Cancelled checkpoint exists");frozen.verifyPhysicalState(checkpoint);
+            check(checkpoint.score == frozen.score && !engine.portalActive && engine.state == GameEngine.State.PLAYING,
+                    "Cancellation keeps original score and resumes automatically");
             check(engine.charge == frozen.charge && engine.wideUntil == frozen.wideUntil, "Cancellation grants no power-up");
             return null;
         });
         result.putBoolean("cancel_round_trip", true);
+    }
+
+    private void testFailedRoundTrip() throws Exception {
+        onMain(()->{brickActivity.game.start(true);return null;});
+        ActivityMonitor monitor=starMonitor();FrozenLevel frozen=triggerMystery(brickActivity);
+        io.github.jeremyjia.stardrift.MainActivity star=waitForStar(monitor);
+        View view=(View)field(star,"game");
+        io.github.jeremyjia.stardrift.GameEngine engine=(io.github.jeremyjia.stardrift.GameEngine)field(view,"game");
+        onMain(()->{
+            engine.hp=1;engine.invulnerable=0;
+            io.github.jeremyjia.stardrift.GameEngine.Shot shot=new io.github.jeremyjia.stardrift.GameEngine.Shot();
+            shot.x=engine.shipX;shot.y=engine.shipY;shot.hostile=true;shot.damage=20;shot.life=2;shot.r=4;engine.shots.add(shot);
+            engine.update(.016f);check(engine.phase==io.github.jeremyjia.stardrift.GameEngine.Phase.LOST,"Damage ends encounter");view.invalidate();return null;
+        });
+        awaitBrickResult(frozen.portalId);
+        onMain(()->{check(brickActivity.game.engine.state==GameEngine.State.PLAYING,"Defeat also returns without a confirmation");return null;});
+        result.putBoolean("defeat_auto_return",true);
     }
 
     private FrozenLevel triggerMystery(MainActivity activity) throws Exception {
@@ -336,23 +354,6 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
 
     private static Object field(Object owner, String name) throws Exception {
         Field field = owner.getClass().getDeclaredField(name); field.setAccessible(true); return field.get(owner);
-    }
-
-    private static void tapGameButton(View view, String action) throws Exception {
-        for (Object button : (List<?>) field(view, "buttons")) {
-            if (!action.equals(field(button, "action"))) continue;
-            RectF bounds = (RectF) field(button, "bounds");
-            float scale = view.getWidth() / 400f;
-            long now = SystemClock.uptimeMillis();
-            MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN,
-                    bounds.centerX() * scale, bounds.centerY() * scale, 0);
-            MotionEvent up = MotionEvent.obtain(now, now + 25, MotionEvent.ACTION_UP,
-                    bounds.centerX() * scale, bounds.centerY() * scale, 0);
-            try { view.dispatchTouchEvent(down); view.dispatchTouchEvent(up); }
-            finally { down.recycle(); up.recycle(); }
-            return;
-        }
-        throw new AssertionError("Expected visible game button: " + action);
     }
 
     private static View findDescription(View root, String description) {

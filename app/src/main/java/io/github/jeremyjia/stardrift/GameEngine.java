@@ -77,12 +77,12 @@ public final class GameEngine {
         runSeed = seed; random = new Random(seed);
         challengeMode = false; runDuration = RUN_SECONDS;
         phase = Phase.PLAYING; time = 0; hp = maxHp = 100; shield = 0;
-        level = 1; xp = 0; xpNext = 7; pulseCharge = 1;
+        level = 1; xp = 0; xpNext = 6; pulseCharge = 1;
         kills = score = 0; combo = 0; comboTimer = 0;
         shipX = width / 2; shipY = height * 0.68f;
         targetX = shipX; targetY = shipY; targeting = false;
-        invulnerable = 1; fireTimer = 0.1f; spawnTimer = 0.75f;
-        damage = 11; fireRate = 3.6f; magnetRadius = 100; pulseCooldown = 18;
+        invulnerable = 1; fireTimer = 0.1f; spawnTimer = 0.25f;
+        damage = 12; fireRate = 6; magnetRadius = 150; pulseCooldown = 14;
         moveSpeed = 340; armor = regeneration = 0; projectiles = 1; piercing = 0;
         nextEnemyId = 1; bossSpawned = bossDefeated = false; lastUpgrade = "";
         for (int i = 0; i < upgradeRanks.length; i++) upgradeRanks[i] = 0;
@@ -94,7 +94,9 @@ public final class GameEngine {
         start(seed);
         challengeMode = true;
         runDuration = Float.isFinite(seconds) ? clamp(seconds, 15, 90) : 30;
-        spawnTimer = 0.4f;
+        spawnTimer = 0.2f;
+        projectiles = 2;
+        pulseCooldown = 9;
     }
 
     public float getFireRate() { return fireRate; }
@@ -103,6 +105,7 @@ public final class GameEngine {
     public float getMagnetRadius() { return magnetRadius; }
     public float getPulseCooldown() { return pulseCooldown; }
     public int getUpgradeCount() { return level - 1; }
+    public int getWave() { return challengeMode ? Math.min(3, 1 + (int)(time / (runDuration / 3))) : Math.min(6, 1 + (int)(time / 30)); }
     public int getRank(String id) { int index = upgradeIndex(id); return index < 0 ? 0 : upgradeRanks[index]; }
 
     public void setTarget(float x, float y) {
@@ -128,9 +131,10 @@ public final class GameEngine {
         spawnTimer -= dt;
         if (spawnTimer <= 0 && enemies.size() < MAX_ENEMIES) {
             spawnEnemy(-1);
-            if (time > 75 && random.nextFloat() < 0.35f && enemies.size() < MAX_ENEMIES) spawnEnemy(-1);
-            spawnTimer = Math.max(0.46f, 1.75f - time * 0.008f) * (bossSpawned && !bossDefeated ? 1.4f : 1);
-            if (challengeMode) spawnTimer *= 0.72f;
+            if ((challengeMode ? getWave() >= 2 && random.nextFloat() < (getWave() == 3 ? .8f : .45f)
+                    : time > 45 && random.nextFloat() < .35f) && enemies.size() < MAX_ENEMIES) spawnEnemy(-1);
+            spawnTimer = challengeMode ? (getWave() == 1 ? .8f : getWave() == 2 ? .55f : .36f)
+                    : Math.max(.38f, 1.05f - time * .004f) * (bossSpawned && !bossDefeated ? 1.3f : 1);
         }
         if (!challengeMode && !bossSpawned && time >= 150) { spawnEnemy(3); bossSpawned = true; event("boss"); }
         updateEnemies(dt);
@@ -160,7 +164,7 @@ public final class GameEngine {
         e.id = nextEnemyId++; e.type = requestedType;
         if (e.type < 0) {
             float roll = random.nextFloat();
-            e.type = time > 42 && roll < 0.18f ? 2 : (time > 18 && roll < 0.43f ? 1 : 0);
+            e.type = time > (challengeMode ? 12 : 25) && roll < .23f ? 2 : (time > (challengeMode ? 6 : 10) && roll < .52f ? 1 : 0);
         }
         e.r = e.type == 3 ? 31 : e.type == 2 ? 17 : e.type == 1 ? 11 : 10;
         e.maxHp = e.type == 3 ? 610 : e.type == 2 ? 56 + time * 0.2f : e.type == 1 ? 21 + time * 0.08f : 11 + time * 0.045f;
@@ -169,7 +173,7 @@ public final class GameEngine {
         if (e.type == 3) { e.x = width / 2; e.y = 174; }
         else {
             for (int attempt = 0; attempt < 8; attempt++) {
-                int side = random.nextInt(time < 12 ? 1 : 3);
+                int side = random.nextInt(time < (challengeMode ? 3 : 6) ? 1 : 3);
                 if (side == 0) { e.x = 24 + random.nextFloat() * (width - 48); e.y = 145; }
                 else { e.x = side == 1 ? 14 : width - 14; e.y = 170 + random.nextFloat() * (height - 340); }
                 if (distanceSq(e.x, e.y, shipX, shipY) > 110 * 110) break;
@@ -191,23 +195,28 @@ public final class GameEngine {
                 e.y += (174 + (float) Math.sin(e.age * 0.9f) * 25 - e.y) * dt;
                 e.attackTimer -= dt;
                 if (e.attackTimer <= 0) {
-                    for (int b = 0; b < 9; b++) enemyShot(e, e.age * 0.3f + b * 6.283185f / 9, 92, 12);
-                    enemyShot(e, e.angle, 150, 15);
+                    for (int b = 0; b < 11; b++) enemyShot(e, e.age * 0.3f + b * 6.283185f / 11, 132, 12);
+                    for(int b=-1;b<=1;b++)enemyShot(e, e.angle + b*.15f, 178, 15);
                     e.attackTimer = e.hp < e.maxHp * 0.4f ? 1 : 1.4f;
                 }
             } else if (e.type == 1) {
                 e.chargeTimer -= dt;
                 if (e.chargeTimer < 0) {
-                    e.vx = dx / distance * 160; e.vy = dy / distance * 160; e.chargeTimer = 2.4f;
+                    float dashSpeed = challengeMode ? 205 + time : 195 + Math.min(40,time*.3f);
+                    e.vx = dx / distance * dashSpeed; e.vy = dy / distance * dashSpeed; e.chargeTimer = 2.4f;
                 }
                 if (e.chargeTimer > 1.85f) { e.x += e.vx * dt; e.y += e.vy * dt; }
                 else { e.x += dx / distance * dt * 24; e.y += dy / distance * dt * 24; }
             } else {
-                speed = e.type == 2 ? 20 : 30 + Math.min(22, time * 0.12f);
+                speed = e.type == 2 ? 28 : (challengeMode ? 53 + time*.8f : 43 + Math.min(30, time*.2f));
                 e.x += dx / distance * speed * dt; e.y += dy / distance * speed * dt;
                 if (e.type == 2) {
                     e.attackTimer -= dt;
-                    if (e.attackTimer <= 0) { enemyShot(e, e.angle, 98, 12); e.attackTimer = 2.6f; }
+                    if (e.attackTimer <= 0) {
+                        enemyShot(e, e.angle, challengeMode ? 135 : 145, 12);
+                        if(challengeMode && getWave()==3){enemyShot(e,e.angle-.22f,120,10);enemyShot(e,e.angle+.22f,120,10);}
+                        e.attackTimer = challengeMode ? 2 : 2.2f;
+                    }
                 }
             }
             e.x = clamp(e.x, -20, width + 20); e.y = clamp(e.y, 135, height - 96);
@@ -305,8 +314,8 @@ public final class GameEngine {
             Gem g = gems.get(i); g.age += dt;
             float dx = shipX - g.x, dy = shipY - g.y, dist = length(dx, dy);
             // Old pickups slowly drift toward the pilot, preventing permanently missed levels.
-            if (dist < magnetRadius || g.age > 11) {
-                float speed = 120 + (magnetRadius - Math.min(dist, magnetRadius)) * 2;
+            if (dist < magnetRadius || g.age > (challengeMode ? 3.5f : 5)) {
+                float speed = 180 + (magnetRadius - Math.min(dist, magnetRadius)) * 2;
                 if (dist > 0.1f) { g.x += dx / dist * speed * dt; g.y += dy / dist * speed * dt; }
             } else { g.x += g.vx * dt; g.y += g.vy * dt; g.vx *= 1 - dt * 3; g.vy *= 1 - dt * 3; }
             if (dist < shipRadius + 8) {
@@ -317,7 +326,7 @@ public final class GameEngine {
     }
 
     private void prepareUpgrade() {
-        xp -= xpNext; level++; xpNext = 7 + (level - 1) * 4;
+        xp -= xpNext; level++; xpNext = 6 + (level - 1) * 3;
         choices.clear(); List<Upgrade> pool = new ArrayList<>();
         pool.add(upgrade(0, "rapid", "流光引擎", "射速提升 25%", "射速"));
         pool.add(upgrade(1, "power", "高能弹芯", "弹丸伤害提升 30%", "火力"));
@@ -329,7 +338,12 @@ public final class GameEngine {
         if (regeneration < 2.5f) pool.add(upgrade(7, "regen", "自愈星尘", "每秒恢复 0.5 生命，减伤 +5%", "修复"));
         Collections.shuffle(pool, random);
         choices.addAll(pool.subList(0, Math.min(3, pool.size())));
-        phase = Phase.UPGRADE; targeting = false; event("upgrade");
+        phase = Phase.UPGRADE;
+        if(challengeMode) {
+            // Short cross-game encounters keep moving; each run gets its own build.
+            chooseUpgrade(random.nextInt(choices.size()));
+            event("auto_upgrade");
+        } else { targeting = false; event("upgrade"); }
     }
 
     private Upgrade upgrade(int rankIndex, String id, String title, String description, String tag) {

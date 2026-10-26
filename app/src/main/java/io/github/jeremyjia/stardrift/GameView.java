@@ -46,7 +46,8 @@ public final class GameView extends View {
     private final float[] stars = new float[330];
     private final Random visualRandom = new Random(160626);
     private float w = 400, h = 860, scale = 1, top = 28, bottom = 12;
-    private float ambient, fxFlash, pulseWave, toastTime, shake;
+    private float ambient, fxFlash, pulseWave, toastTime, shake, bonusFinishElapsed;
+    private boolean bonusReturnQueued;
     private String toast = "", screen = "home", modal = "";
     private boolean suspended = true;
     private boolean paused, recorded, guideStartsRun, touchDriving;
@@ -114,6 +115,17 @@ public final class GameView extends View {
                 host.recordRun(Math.round(game.score),Math.round(game.kills),game.time,game.phase==GameEngine.Phase.WON);
                 recorded=true;
             }
+            if(host.isBonusRun() && (game.phase==GameEngine.Phase.WON || game.phase==GameEngine.Phase.LOST)) {
+                bonusFinishElapsed+=dt;
+                if(bonusFinishElapsed>=.65f && !bonusReturnQueued) {
+                    bonusReturnQueued=true;
+                    post(()->{
+                        host.finishBonus(bonusReward(),game.phase==GameEngine.Phase.WON,false);
+                        // A failed storage write can retry automatically without a dead end.
+                        postDelayed(()->{if(isAttachedToWindow()){bonusReturnQueued=false;bonusFinishElapsed=-1.4f;invalidate();}},2000);
+                    });
+                }
+            }
         }
         buttons.clear();
         canvas.save(); canvas.scale(scale,scale);
@@ -123,7 +135,9 @@ public final class GameView extends View {
             if (shake>0 && !host.reduceMotion()) canvas.translate((visualRandom.nextFloat()-.5f)*shake,(visualRandom.nextFloat()-.5f)*shake);
             arena(canvas); canvas.restore(); hud(canvas);
             if (game.phase==GameEngine.Phase.UPGRADE && !paused) upgrade(canvas);
-            else if (game.phase==GameEngine.Phase.LOST || game.phase==GameEngine.Phase.WON) result(canvas);
+            else if (game.phase==GameEngine.Phase.LOST || game.phase==GameEngine.Phase.WON) {
+                if(host.isBonusRun())bonusDeparture(canvas);else result(canvas);
+            }
             else if (paused && modal.isEmpty()) pauseMenu(canvas);
         }
         if (modal.equals("settings")) settings(canvas);
@@ -140,7 +154,7 @@ public final class GameView extends View {
     private void background(Canvas c) {
         p.setShader(backdrop); p.setStyle(Paint.Style.FILL); p.setAlpha(255); c.drawRect(0,0,w,h,p); p.setShader(null);
         for (int i=0;i<stars.length;i+=3) {
-            float speed=host.reduceMotion()?0:ambient*(2+stars[i+2]*7);
+            float speed=host.reduceMotion()?0:ambient*(screen.equals("play")?18+stars[i+2]*32:2+stars[i+2]*7);
             float sx=stars[i]*w,sy=(stars[i+1]*h+speed)%h;
             int a=(int)(35+stars[i+2]*91);
             circle(c,sx,sy,.45f+stars[i+2]*.75f,alpha(WHITE,a));
@@ -201,9 +215,11 @@ public final class GameView extends View {
     private void arena(Canvas c) {
         // Edge guide remains understated, leaving the playfield uncluttered.
         line(c,22,top+100,378,top+100,.5f,0x193e6871);
-        if(game.time<8) {
-            float a=1-Math.max(0,game.time-5)/3;
-            text(c,game.challengeMode?"神 秘 砖 块  /  星 隙 奇 遇":"01  /  星 尘 边 境",200,h*.36f,12,alpha(MINT,(int)(a*175)),MEDIUM,Paint.Align.CENTER);
+        float waveAge=game.time%(game.challengeMode?game.runDuration/3:30);
+        if(waveAge<2) {
+            float a=Math.min(1,(2-waveAge)*1.5f);
+            String label=game.challengeMode?(game.getWave()==1?"第一波 · 侦察群":game.getWave()==2?"第二波 · 侧翼夹击":"最终波 · 弹幕突围"):("WAVE 0"+game.getWave());
+            text(c,label,200,top+153,16,alpha(MINT,(int)(a*200)),MEDIUM,Paint.Align.CENTER);
         }
         for(GameEngine.Gem g:game.gems) {
             float pulse=(float)Math.sin(ambient*3+g.age)*.7f;
@@ -284,6 +300,7 @@ public final class GameView extends View {
             polygon(c,0,0,e.r,6,-30,e.hit>0?WHITE:color,false,1.4f);
             diamond(c,0,0,5,color,true);
         } else if(e.type==1) {
+            if(e.chargeTimer<.5f)ring(c,0,0,e.r+5,1.3f,alpha(RED,170));
             path.reset();path.moveTo(0,-e.r);path.lineTo(e.r*.75f,e.r);path.lineTo(0,e.r*.45f);path.lineTo(-e.r*.75f,e.r);path.close();
             fillPath(c,e.hit>0?WHITE:0xff50313b);strokePath(c,color,1.3f);
             circle(c,0,1,2,color);
@@ -314,6 +331,7 @@ public final class GameView extends View {
         float xp=Math.min(1,game.xp/Math.max(1,game.xpNext));
         text(c,"LV "+game.level,23,top+108,9,MINT,MONO,Paint.Align.LEFT);
         round(c,65,top+102,313,2,1,0xff1c343f);round(c,65,top+102,313*xp,2,1,MINT);
+        if(game.combo>=3)text(c,game.combo+" 连破",377,top+128,10,GOLD,MEDIUM,Paint.Align.RIGHT);
         float bY=h-bottom-65;
         boolean ready=game.pulseCharge>=.999f;
         round(c,111,bY,178,51,25,ready?0xffa8eed6:0xe8142935);
@@ -325,7 +343,7 @@ public final class GameView extends View {
         if(game.time<13 && game.phase==GameEngine.Phase.PLAYING) {
             text(c,"拖动任意位置驾驶 · 松手悬停",200,bY-25,10,MUTED,REG,Paint.Align.CENTER);
         } else {
-            text(c,game.challengeMode?"30 秒奇遇 · 返回时保留碰界当前进度":game.time>=150?"最终信号  /  消灭守望者":"击破 "+Math.round(game.kills)+"  ·  星尘会自动吸附",200,bY-22,9,MUTED,REG,Paint.Align.CENTER);
+            text(c,game.challengeMode?"WAVE "+game.getWave()+"/3 · 自动升级 · 结束自动返回":game.time>=150?"最终信号  /  消灭守望者":"击破 "+Math.round(game.kills)+"  ·  星尘会自动吸附",200,bY-22,9,MUTED,REG,Paint.Align.CENTER);
         }
         float progress=Math.min(1,game.time/game.runDuration);
         round(c,22,h-bottom-1,356,2,1,0xff19313b);round(c,22,h-bottom-1,356*progress,2,1,0xff49786f);
@@ -380,6 +398,16 @@ public final class GameView extends View {
         if(!host.isBonusRun())button(c,"home",28,y+408,344,44,"返回星港",null,false);
     }
 
+    private void bonusDeparture(Canvas c) {
+        buttons.clear();
+        float y=h*.43f;
+        round(c,35,y,330,112,23,0xf0102832);
+        border(c,35,y,330,112,23,0xff4e8a7a,1);
+        text(c,game.phase==GameEngine.Phase.WON?"突围成功":"奇遇结束",200,y+44,26,WHITE,MEDIUM,Paint.Align.CENTER);
+        text(c,"奖励 +"+bonusReward()+" · 自动返回碰界",200,y+77,12,MINT,REG,Paint.Align.CENTER);
+        round(c,60,y+95,280*Math.min(1,bonusFinishElapsed/.65f),2,1,MINT);
+    }
+
     private void settings(Canvas c) {
         overlay(c);buttons.clear();
         float y=(h-396)/2;
@@ -417,10 +445,12 @@ public final class GameView extends View {
     }
 
     private void gameEvent(String name) {
+        if(name.equals("auto_upgrade")){host.event("upgrade");toast="自动装配 · "+game.lastUpgrade;toastTime=1.5f;return;}
         host.event(name);
         if(name.equals("hit")){fxFlash=.8f;shake=5;}
         else if(name.equals("pulse")){pulseWave=1;shake=3;}
         else if(name.equals("upgrade")){touchDriving=false;game.releaseTarget();}
+        else if(name.equals("kill") && game.combo>=3){shake=Math.min(2.4f,.7f+game.combo*.1f);}
     }
 
     private void startGame() {

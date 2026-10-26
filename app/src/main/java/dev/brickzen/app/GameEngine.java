@@ -422,12 +422,19 @@ final class GameEngine implements Serializable {
     }
 
     private void selectMysteryBrick() {
-        Brick selected = null;
+        int frontRow = Integer.MIN_VALUE, backRow = Integer.MAX_VALUE;
         for (Brick brick : this.bricks) {
             brick.mystery = false;
-            if (selected == null || brick.row > selected.row
-                    || (brick.row == selected.row && Math.abs(brick.x + brick.w / 2 - 500)
-                    < Math.abs(selected.x + selected.w / 2 - 500))) {
+            frontRow = Math.max(frontRow, brick.row);
+            backRow = Math.min(backRow, brick.row);
+        }
+        // Sample the interior uniformly, leaving the first row reached by the ball ordinary.
+        // A one-row layout can still contain a portal, rather than losing the feature entirely.
+        Brick selected = null;
+        int candidates = 0;
+        for (Brick brick : this.bricks) {
+            if (brick.hp > 0 && (backRow == frontRow || brick.row < frontRow)
+                    && this.random.nextInt(++candidates) == 0) {
                 selected = brick;
             }
         }
@@ -1178,7 +1185,7 @@ final class GameEngine implements Serializable {
         return true;
     }
 
-    /** Apply a checked host result once, leaving the original level paused for the player. */
+    /** Apply a checked host result once and continue the state interrupted by the portal. */
     void completePortal(int bonusScore, boolean survived, boolean cancelled) {
         if (!this.portalActive) return;
         this.portalPending = false;
@@ -1192,7 +1199,8 @@ final class GameEngine implements Serializable {
                 event(Kind.POWER, this.paddleX, paddleY() - 75, bonus, 0, Power.WIDE);
             }
         }
-        this.state = State.PAUSED;
+        this.state = this.beforePause;
+        if (this.state == State.READY) launch();
     }
 
     /** Versioned checkpoint for trusted application-private storage only. */

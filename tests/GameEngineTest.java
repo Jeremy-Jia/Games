@@ -5,7 +5,7 @@ import java.util.HashSet;
 public final class GameEngineTest {
     public static void main(String[] args) {
         movementAndPause(); upgradeChoice(); entityBounds(); terminalStates(); deterministicRun(); bossAtEntityCap();
-        challengeCompletion(); challengePauseAndDeath(); challengeBoundsAndReset();
+        challengeCompletion(); challengePauseAndDeath(); challengeBoundsAndReset(); challengeAutoUpgrade();
         System.out.println("PASS: movement, upgrade pause/choice, entity bounds, terminal states, deterministic replay, boss at entity cap, timed challenge completion/pause/death/reset");
     }
     private static void movementAndPause() {
@@ -73,7 +73,9 @@ public final class GameEngineTest {
         GameEngine g = new GameEngine(name -> { if ("win".equals(name)) wins[0]++; });
         g.startChallenge(8, 30);
         for (int frame = 0; frame < 60 * 31 && g.phase != GameEngine.Phase.WON; frame++) {
-            if (g.phase == GameEngine.Phase.UPGRADE) g.chooseUpgrade(0);
+            g.setTarget(200+(float)Math.sin(frame*.025)*145,500+(float)Math.cos(frame*.025)*180);
+            if(g.pulseCharge>=.999f && g.enemies.size()>5)g.pulse();
+            check(g.phase!=GameEngine.Phase.UPGRADE,"challenge upgrades never block the action");
             g.update(1f / 60);
         }
         check(g.phase == GameEngine.Phase.WON && g.time == 30 && !g.bossSpawned, "challenge ends at duration without boss");
@@ -104,6 +106,14 @@ public final class GameEngineTest {
         g.start(1); check(!g.challengeMode && g.runDuration == 180, "ordinary run resets challenge state");
         g.time = 180; g.update(.016f);
         check(g.phase == GameEngine.Phase.PLAYING && g.bossSpawned, "ordinary run still requires boss defeat");
+    }
+    private static void challengeAutoUpgrade(){
+        GameEngine g=new GameEngine(null);g.startChallenge(71,30);
+        GameEngine.Gem gem=new GameEngine.Gem();gem.x=g.shipX;gem.y=g.shipY;gem.value=g.xpNext;g.gems.add(gem);
+        g.setTarget(330,g.shipY);g.update(.016f);
+        check(g.phase==GameEngine.Phase.PLAYING && g.level==2 && g.choices.isEmpty() && !g.lastUpgrade.isEmpty(),"challenge equips upgrade automatically");
+        float x=g.shipX;g.update(.016f);check(g.shipX>x,"auto upgrade does not release steering");
+        g.time=9.9f;check(g.getWave()==1,"first wave");g.time=10;check(g.getWave()==2,"second wave");g.time=20;check(g.getWave()==3,"final wave");
     }
     private static void check(boolean condition, String message) { if (!condition) throw new AssertionError(message); }
 }

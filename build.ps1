@@ -20,7 +20,9 @@ $variant = $Configuration.ToLowerInvariant()
 $sourceApk = Join-Path $projectRoot "app\build\outputs\apk\$variant\app-$variant.apk"
 $releaseDirectory = Join-Path $projectRoot 'releases'
 New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
-$releaseApk = Join-Path $releaseDirectory "Games-2.0.0-$variant.apk"
+$versionMatch = [regex]::Match((Get-Content -LiteralPath (Join-Path $projectRoot 'app\build.gradle') -Raw), "versionName\s+'([^']+)'")
+if (-not $versionMatch.Success) { throw 'Could not read application versionName.' }
+$releaseApk = Join-Path $releaseDirectory "Games-$($versionMatch.Groups[1].Value)-$variant.apk"
 Copy-Item -LiteralPath $sourceApk -Destination $releaseApk -Force
 Write-Output "APK=$releaseApk"
 Write-Output "SHA256=$((Get-FileHash -LiteralPath $releaseApk -Algorithm SHA256).Hash.ToLowerInvariant())"

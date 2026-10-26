@@ -3,16 +3,18 @@ package dev.brickzen.app;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectOutputStream;
 import java.util.Base64;
+import java.util.HashSet;
 
 /** Pure Java regression tests for the recovered brick engine and its star-portal handoff. */
 public final class BrickEngineTest {
     public static void main(String[] args) throws Exception {
         mysteryPlacement(); physicalPortalPausesAfterBounce(); chainPortalStopsRemainingStrikes();
-        checkpointRoundTrip(); rewardIsOnceOnly(); cancelledPortal(); lastBrickPortal(); invalidCheckpoints();
+        checkpointRoundTrip(); rewardIsOnceOnly(); cancelledPortal(); readyPortalAutoLaunch(); lastBrickPortal(); invalidCheckpoints();
         System.out.println("PASS: mystery placement, hit/bounce/freeze, chain freeze, full checkpoint/random, idempotent reward/cancel, final-brick clear, invalid snapshots");
     }
 
     private static void mysteryPlacement() {
+        HashSet<Integer> rows = new HashSet<>(), columns = new HashSet<>();
         for (int seed = 0; seed < 30; seed++) {
             GameEngine engine = new GameEngine(seed);
             for (int level = 1; level <= 12; level++) {
@@ -20,12 +22,17 @@ public final class BrickEngineTest {
                 int count = 0, bottomRow = -1, mysteryRow = -1;
                 for (GameEngine.Brick brick : engine.bricks) {
                     bottomRow = Math.max(bottomRow, brick.row);
-                    if (brick.mystery) { count++; mysteryRow = brick.row; }
+                    if (brick.mystery) { count++; mysteryRow = brick.row; rows.add(brick.row); columns.add(Math.round(brick.x+brick.w/2)); }
                 }
-                check(!engine.bricks.isEmpty() && count == 1 && mysteryRow == bottomRow, "one reachable mystery brick per level");
+                check(!engine.bricks.isEmpty() && count == 1 && mysteryRow < bottomRow, "one mystery brick inside the formation, never the front row");
                 check(!engine.portalPending && !engine.portalActive && engine.portalId.isEmpty(), "new-level portal reset");
             }
         }
+        check(rows.size() >= 4 && columns.size() >= 24, "mystery locations vary across rows and columns");
+        GameEngine a = new GameEngine(763), b = new GameEngine(763);
+        a.start(21,true,0);b.start(21,true,0);
+        for(int i=0;i<a.bricks.size();i++)check(a.bricks.get(i).mystery==b.bricks.get(i).mystery,"seeded placement is reproducible");
+        System.out.println("Placement: 360 layouts, " + rows.size() + " rows / " + columns.size() + " horizontal positions, no front-row portal");
     }
 
     private static GameEngine minimal(boolean lastBrick) {
@@ -102,11 +109,11 @@ public final class BrickEngineTest {
         int oldScore = engine.score, lives = engine.lives, hp = engine.bricks.get(0).hp;
         engine.completePortal(9000, true, false);
         check(engine.score == oldScore + 3000 && engine.charge == 1 && engine.wideUntil >= time + 14, "capped reward and successful power-up");
-        check(!engine.portalActive && !engine.portalPending && engine.state == GameEngine.State.PAUSED, "reward waits for player resume");
+        check(!engine.portalActive && !engine.portalPending && engine.state == GameEngine.State.PLAYING, "reward automatically resumes the interrupted game");
         check(engine.lives == lives && engine.bricks.get(0).hp == hp && ball.x == x && ball.y == y && ball.vx == vx
                 && ball.vy == vy && engine.time == time, "reward preserves original run");
         engine.completePortal(3000, true, false); check(engine.score == oldScore + 3000, "reward idempotent");
-        engine.resume(); check(engine.state == GameEngine.State.PLAYING, "player can resume after result");
+        engine.tick(1f/120);check(engine.time>time && (ball.x!=x||ball.y!=y),"ball continues without a resume tap");
         engine.hit(engine.bricks.get(0), false); check(!engine.portalActive, "same brick cannot reopen portal");
     }
 
@@ -115,7 +122,7 @@ public final class BrickEngineTest {
         int score = engine.score; float charge = engine.charge, wide = engine.wideUntil;
         engine.completePortal(3000, true, true);
         check(engine.score == score && engine.charge == charge && engine.wideUntil == wide && !engine.portalActive, "cancel has no reward or penalty");
-        check(engine.state == GameEngine.State.PAUSED && engine.lives == 3, "cancel preserves run and waits for resume");
+        check(engine.state == GameEngine.State.PLAYING && engine.lives == 3, "cancel automatically returns to the run");
     }
 
     private static void lastBrickPortal() {
@@ -125,6 +132,12 @@ public final class BrickEngineTest {
         GameEngine restored = GameEngine.fromSnapshot(engine.snapshot()); check(restored != null, "cleared portal can persist");
         restored.completePortal(100, true, false); restored.resume();
         check(restored.state == GameEngine.State.CLEARED, "returning from last-brick portal advances clear flow");
+    }
+
+    private static void readyPortalAutoLaunch(){
+        GameEngine engine=minimal(false);engine.state=GameEngine.State.READY;engine.balls.get(0).vx=engine.balls.get(0).vy=0;
+        engine.hit(engine.bricks.get(0),false);engine.completePortal(0,false,true);
+        check(engine.state==GameEngine.State.PLAYING && engine.balls.get(0).vy<0,"portal from ready state launches without another tap");
     }
 
     private static void invalidCheckpoints() throws Exception {

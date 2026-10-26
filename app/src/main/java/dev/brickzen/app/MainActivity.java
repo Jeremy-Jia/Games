@@ -188,14 +188,15 @@ public final class MainActivity extends Activity {
         if(game==null||!game.engine.portalActive||id==null||!id.equals(game.engine.portalId))return false;
         String before=game.engine.snapshot();if(before==null)return false;int previous=game.engine.score;
         game.engine.completePortal(Math.max(0,Math.min(3000,score)),survived,cancelled);
-        game.scene=GameView.Scene.GAME;game.engine.pause();game.engine.portalPending=false;
-        String message=cancelled?"已返回碰界，原局已保留":"星隙奖励 +"+(game.engine.score-previous)+" 分 · 点击继续";
+        game.scene=GameView.Scene.GAME;game.engine.portalPending=false;
+        String message=cancelled?"已返回碰界，继续冒险":"星隙奖励 +"+(game.engine.score-previous)+" 分 · 冒险继续";
         String completed=game.engine.snapshot();
         if(completed==null||!game.prefs.edit().putString(PORTAL_SNAPSHOT,completed).putString("portal_message",message).commit()){
             game.engine=GameEngine.fromSnapshot(before);game.toast="奖励正在等待保存，请重新进入本局";game.toastLife=5;game.invalidate();return false;
         }
         getSharedPreferences("portal_results",MODE_PRIVATE).edit().remove(id).commit();
-        game.toast=message;game.toastLife=6;game.save();game.refresh();game.invalidate();game.announceForAccessibility(message);
+        game.accumulator=0;game.lastFrame=0;
+        game.toast=message;game.toastLife=3;game.save();game.refresh();game.invalidate();game.announceForAccessibility(message);
         return true;
     }
 
@@ -217,7 +218,13 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onSaveInstanceState(Bundle state){checkpointPortal();super.onSaveInstanceState(state);}
-    @Override protected void onResume(){super.onResume();portalLaunching=false;consumeSavedPortalResult();if(game!=null)game.wake();}
+    private void continuePendingPortal(){
+        if(game==null||!hasWindowFocus()||portalLaunching||!game.engine.portalActive)return;
+        game.post(()->{if(hasWindowFocus()&&!portalLaunching&&game.engine.portalActive)openStarPortal();});
+    }
+
+    @Override protected void onResume(){super.onResume();portalLaunching=false;consumeSavedPortalResult();if(game!=null)game.wake();continuePendingPortal();}
+    @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(focused)continuePendingPortal();}
     @Override protected void onPause(){if(game!=null){game.sleep();checkpointPortal();}super.onPause();}
     @Override protected void onDestroy(){if(game!=null)game.close();super.onDestroy();}
     @Override public void onBackPressed(){if(game!=null&&game.back())return;finish();}

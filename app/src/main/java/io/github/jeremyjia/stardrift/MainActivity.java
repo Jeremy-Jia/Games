@@ -214,7 +214,7 @@ public final class MainActivity extends Activity implements GameView.Host {
             result.put("cancelled", cancelled);
             if (!portalId.isEmpty() && !getSharedPreferences("portal_results", MODE_PRIVATE)
                     .edit().putString(portalId, result.toString()).commit()) {
-                android.widget.Toast.makeText(this,"奖励保存失败，请再点一次返回",android.widget.Toast.LENGTH_LONG).show();
+                android.widget.Toast.makeText(this,"奖励暂未保存，请稍候",android.widget.Toast.LENGTH_LONG).show();
                 return;
             }
             bonusReturned = true;

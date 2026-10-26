@@ -2,15 +2,15 @@
 
 一个完全离线的 Android 小游戏集。保留原来的「碰界」打砖块，加入「星隙 · Star Drift」太空生存，并用神秘砖块串起两种玩法。
 
-版本：**2.0.0**（`versionCode 7`）
+版本：**2.1.0**（`versionCode 8`）
 
 包名：`dev.brickzen.app`
 
 仓库：[Jeremy-Jia/Games](https://github.com/Jeremy-Jia/Games)
 
-[下载当前 APK](releases/Games-2.0.0-release.apk)
+[下载当前 APK](releases/Games-2.1.0-release.apk)
 
-<img src="docs/verification/collection.png" width="230" alt="碰界游戏集入口"> <img src="docs/verification/star-complete.png" width="230" alt="星隙奇遇结算"> <img src="docs/verification/brick-return.png" width="230" alt="带奖励返回原来的碰界局面">
+<img src="docs/verification/2.1.0/collection.png" width="230" alt="碰界游戏集入口"> <img src="docs/verification/2.1.0/star-complete.png" width="230" alt="星隙奇遇自动结算"> <img src="docs/verification/2.1.0/brick-return.png" width="230" alt="带奖励返回后自动继续打球">
 
 ## 两种玩法，一个入口
 
@@ -18,15 +18,17 @@
 | --- | --- |
 | 碰界 | 滑动挡板、轻点发球；保留无限模式、挑战模式、几何砖块、道具、连击、音效与触感反馈，以及浅色/深色外观和挡板高度设置。 |
 | 星隙 | 竖屏单手拖动飞船，自动瞄准开火，收集星尘进行三选一升级，蓄能释放冲击波。标准航程约三分钟，最后阶段出现 Boss。 |
-| 神秘砖块 | 碰界每关出现一块带星环的神秘砖。首次击中后暂停并保存原局，进入 30 秒星隙奇遇；结束后携带奖励回到碰界。 |
+| 神秘砖块 | 每关随机藏在砖阵内部，避开最先接触的一排。击中后自动切入 30 秒星隙奇遇；升级自动装配，结束自动发奖、返回碰界并继续打球。 |
 
-奇遇带回的额外分数限制在 `0–3000` 分。存活到结束，还能获得 14 秒加宽挡板与满格能量；主动取消不会获得奖励，也不会扣除碰界的生命。返回后点击「继续」恢复原局。
+奇遇带回的额外分数限制在 `0–3000` 分。存活到结束，还能获得 14 秒加宽挡板与满格能量；主动取消不会获得奖励，也不会扣除碰界的生命。成功、失败或提前退出都会自动返回原局，不需要领奖或点击继续。
+
+2.1 的奇遇分为侦察群、侧翼夹击、弹幕突围三波。开局射速更快，星尘更早吸附，约 5–7 秒得到第一次强化；连破和冲刺预警提供更清晰的战斗反馈。普通三分钟航程仍可手动选择升级，短奇遇则始终保持动作连续。
 
 应用没有广告、账号、联网功能或 Root 要求。仅使用震动权限；两款游戏各自保存设置和纪录。集锦入口沿用碰界的外观设置。
 
 ## 安装与存档
 
-发布包位于 `releases/Games-2.0.0-release.apk`；自行构建的 APK 位于 `app/build/outputs/apk/`。
+发布包位于 `releases/Games-2.1.0-release.apk`；自行构建的 APK 位于 `app/build/outputs/apk/`。
 
 集锦继续使用原碰界包名和私有存档名 `brickzen`。**同包名、同签名的覆盖升级**可以保留原来的关卡、纪录与设置。签名不同的 APK 无法直接覆盖，不能通过先卸载来假定存档仍会保留。签名密钥与用户个人存档均不在本仓库中。
 
@@ -63,7 +65,7 @@ $env:GAMES_SIGNING_PASSWORD = '<密钥库及密钥密码>'
 
 发布构建输出到 `app/build/outputs/apk/release/app-release.apk`。当前配置让调试与发布构建共用指定密钥；未指定 `GAMES_SIGNING_STORE` 时使用本机 Android 默认 debug key。这只能保证本机构建的一致性，**不能保证覆盖另一台电脑或另一签名生成的已安装版本**。
 
-本开发工作区另提供 `build.ps1`，复用相邻 `work/` 目录的 Gradle 和缓存；默认执行离线 Release 构建，并复制为 `releases/Games-2.0.0-release.apk`。其他电脑优先使用上述 Gradle Wrapper。
+本开发工作区另提供 `build.ps1`，复用相邻 `work/` 目录的 Gradle 和缓存；默认执行离线 Release 构建，读取版本号并复制为 `releases/Games-<版本>-release.apk`。其他电脑优先使用上述 Gradle Wrapper。
 
 ```powershell
 .\build.ps1
@@ -88,7 +90,7 @@ java -cp build/engine-tests BalanceProbe
 
 测试覆盖碰界神秘砖块触发、原局快照、奖励只领取一次、取消奇遇、星隙移动/升级/终局，以及 30 秒奖励关的时序。`BalanceProbe` 用固定种子的模拟驾驶观察星隙平衡性，不能替代手动体验。
 
-2026-10-26 已在小米 15 上验证覆盖升级、原存档保留、大厅入口、真实 30 秒奇遇、奖励往返、重复结果防护及取消返回。完整原局快照另有纯 Java 回归。详见[验收记录](docs/verification/REPORT.md)，其中区分真机已验证项目与尚未实测的边界。
+2026-10-26 已在小米 15 上验证真实 30 秒奇遇，整个流程不点击领奖或继续，返回后小球恢复运动；主动取消与挑战失败也会自动返回，重复结果不会重复发奖。360 组布局验证了随机位置与首排避让。详见 [2.1.0 验收记录](docs/verification/2.1.0.md)；初版恢复与集成记录保留在 [2.0.0 报告](docs/verification/REPORT.md)。
 
 原生往返测试使用 Android 自带 `Instrumentation`，无需第三方测试依赖：
 

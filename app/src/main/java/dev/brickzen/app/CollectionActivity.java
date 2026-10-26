@@ -83,7 +83,7 @@ public final class CollectionActivity extends Activity {
         TextView portalDesc=label("击中神秘砖块，开启 30 秒奇遇，再带奖励回来。",11,dark?0xffb6a8c4:0xff877592,false);gap(portalDesc,7);portal.addView(portalDesc);
         portal.setContentDescription("了解神秘砖块和跨游戏奇遇");
         portal.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("偶遇另一种好玩")
-                .setMessage("碰界每关会有一块带星环的神秘砖。击中它，即可进入 30 秒星隙挑战。\n\n原来的砖块、小球、生命和分数会为你保留。奇遇结束领取额外分数；存活到结束，还会获得加宽挡板和满格能量。\n\n随时可以结束奇遇回到碰界，返回后点继续即可。")
+                .setMessage("神秘砖会随机藏在砖阵内部，避开最先接触的一排。击中它，会自动切入 30 秒星隙挑战。\n\n三波进攻越来越密，升级自动装配。结束后自动发放奖励、返回碰界并继续打球；存活到结束还会获得宽板和满格能量。\n\n原来的砖块、小球、生命和分数都会保留。随时可主动暂停或提前结束奇遇。")
                 .setPositiveButton("去发现吧",null).show());
         content.addView(portal);space(content,24);
         TextView footer=label("完全离线  ·  无广告  ·  为短暂的空闲而做",10,muted,false);footer.setGravity(Gravity.CENTER);content.addView(footer);
