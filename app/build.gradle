@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'dev.brickzen.app'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+
+    defaultConfig {
+        applicationId 'dev.brickzen.app'
+        minSdk 26
+        targetSdk 36
+        versionCode 7
+        versionName '2.0.0'
+        testInstrumentationRunner 'dev.brickzen.app.CollectionSmokeInstrumentation'
+    }
+
+    signingConfigs {
+        debug {
+            if (System.getenv('GAMES_SIGNING_STORE')) {
+                storeFile file(System.getenv('GAMES_SIGNING_STORE'))
+                storePassword System.getenv('GAMES_SIGNING_PASSWORD') ?: 'android'
+                keyAlias System.getenv('GAMES_SIGNING_ALIAS') ?: 'androiddebugkey'
+                keyPassword System.getenv('GAMES_SIGNING_PASSWORD') ?: 'android'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

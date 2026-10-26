@@ -1,0 +1,9 @@
+.gradle/
+.idea/
+**/build/
+local.properties
+*.iml
+*.keystore
+*.jks
+.DS_Store
+docs/verification/*-device.png

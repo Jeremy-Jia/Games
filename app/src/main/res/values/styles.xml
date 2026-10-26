@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="StarTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#07111a</item>
+        <item name="android:statusBarColor">#07111a</item>
+        <item name="android:navigationBarColor">#07111a</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorAccent">#abf4d8</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+    <style name="AppTheme" parent="@style/AppThemeBase">
+    </style>
+    <style name="AppThemeBase" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#f7f6f0</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#286a59</item>
+        <item name="android:statusBarColor">#f7f6f0</item>
+        <item name="android:navigationBarColor">#f7f6f0</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

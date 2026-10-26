@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <public type="drawable" name="ic_launcher" id="0x7f010000" />
+    <public type="raw" name="armor" id="0x7f020000" />
+    <public type="raw" name="clear" id="0x7f020001" />
+    <public type="raw" name="combo" id="0x7f020002" />
+    <public type="raw" name="hit" id="0x7f020003" />
+    <public type="raw" name="hit2" id="0x7f020004" />
+    <public type="raw" name="hit3" id="0x7f020005" />
+    <public type="raw" name="hit4" id="0x7f020006" />
+    <public type="raw" name="lightning" id="0x7f020007" />
+    <public type="raw" name="meteor" id="0x7f020008" />
+    <public type="raw" name="miss" id="0x7f020009" />
+    <public type="raw" name="nova" id="0x7f02000a" />
+    <public type="raw" name="paddle" id="0x7f02000b" />
+    <public type="raw" name="power" id="0x7f02000c" />
+    <public type="raw" name="prism" id="0x7f02000d" />
+    <public type="raw" name="pulse" id="0x7f02000e" />
+    <public type="raw" name="shatter" id="0x7f02000f" />
+    <public type="string" name="app_name" id="0x7f030000" />
+    <public type="style" name="AppTheme" id="0x7f040000" />
+    <public type="style" name="AppThemeBase" id="0x7f040001" />
+</resources>
