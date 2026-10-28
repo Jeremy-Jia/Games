@@ -3,8 +3,25 @@ import java.util.ArrayList;
 
 public final class TableTennisEngineTest {
     public static void main(String[] args){
-        legalServeAndRally();netFaultAndOut();doubleBounce();scoreAndDeuce();trackingAndReset();determinismAndBounds();
+        legalServeAndRally();netFaultAndOut();doubleBounce();scoreAndDeuce();trackingAndReset();determinismAndBounds();encounterPointsAndDifficulty();
         System.out.println("PASS: table tennis 3D serve/table/net/paddle, rally/scoring/deuce, AI, bounded step and deterministic reset");
+    }
+    private static void encounterPointsAndDifficulty(){
+        TableTennisEngine e=new TableTennisEngine(null);e.startEncounter(7,20);
+        for(int i=0;i<40;i++)forceMiss(e,-1);
+        check(e.playerScore==40&&e.encounterPoints==40&&e.phase==TableTennisEngine.Phase.POINT,"arbitrary random point target can exceed normal11-point match");
+        e.encounterPoints=2147483655L;forceMiss(e,-1);
+        check(e.encounterProgress(0)==2147483656L,"random point progress has long precision");
+        e.startEncounter(4,1);int best=0;
+        for(int i=0;i<60*30;i++){
+            if(e.ballVz>0){float eta=Math.max(0,(TableTennisEngine.STRIKE_Z-e.ballZ)/e.ballVz);e.setPlayerTarget(e.ballX+e.ballVx*eta);}
+            e.update(1f/120);best=Math.max(best,e.rally);if(best>=6)break;
+        }
+        check(best>=4&&e.encounterProgress(1)>=4,"rally objective observes ordinary paddle return events");
+        TableTennisEngine hard=new TableTennisEngine(null);hard.startEncounter(7,100);
+        check(hard.encounterDifficulty==100&&hard.encounterMode,"encounter difficulty has no three-preset ceiling");
+        e.start(4,1);check(!e.encounterMode&&e.encounterPoints==0&&e.encounterBestRally==0,"ordinary match resets random-goal state");
+        e.playerScore=10;forceMiss(e,-1);check(e.phase==TableTennisEngine.Phase.MATCH_OVER,"ordinary match still ends at11");
     }
     private static void legalServeAndRally(){
         ArrayList<String> events=new ArrayList<>();TableTennisEngine e=new TableTennisEngine(events::add);e.start(4,1);e.serve();

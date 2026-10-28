@@ -37,6 +37,7 @@ public final class TableTennisView extends View {
         difficulty=host.preferences.getInt("difficulty",1);
         engine=new TableTennisEngine(name->{host.feedback(name);if(name.equals("hit"))flash=.3f;});
         setFocusable(true);setContentDescription("弧线 3D 乒乓球，左右拖动球拍，滑动速度影响回球落点");
+        if(host.encounter!=null)startEncounter();
     }
     @Override protected void onSizeChanged(int w,int hh,int oldw,int oldh){scale=w/400f;h=hh/scale;readInsets();}
     @Override public WindowInsets onApplyWindowInsets(WindowInsets insets){readInsets();return super.onApplyWindowInsets(insets);}
@@ -46,15 +47,21 @@ public final class TableTennisView extends View {
             top=Math.max(top,getRootWindowInsets().getDisplayCutout().getSafeInsetTop()/Math.max(.1f,scale)+9);
     }
     public void startMatch(int chosen){difficulty=Math.max(0,Math.min(2,chosen));host.preferences.edit().putInt("difficulty",difficulty).apply();engine.start(System.nanoTime(),difficulty);screen="play";paused=false;recorded=false;lastFrame=0;invalidate();}
-    public void onHostPause(){suspended=true;lastFrame=0;activePointer=-1;pressed="";if(screen.equals("play"))paused=true;}
+    public void startEncounter(){if(host.encounter==null)return;engine.startEncounter(host.encounter.plan.seed,host.encounter.plan.difficulty);screen="play";paused=false;recorded=false;lastFrame=0;invalidate();}
+    public void onHostPause(){if(!suspended&&screen.equals("play"))paused=true;suspended=true;lastFrame=0;activePointer=-1;pressed="";}
     public void onHostResume(){suspended=false;lastFrame=0;invalidate();}
     public void resumeMatch(){paused=false;lastFrame=0;invalidate();}
-    public boolean handleBack(){if(screen.equals("play")){if(!paused){paused=true;}else{host.rememberRally(engine.bestRally);screen="menu";paused=false;}invalidate();return true;}return false;}
+    public boolean handleBack(){if(host.encounter!=null&&host.encounter.isEnding())return true;if(screen.equals("play")){if(!paused){paused=true;}else if(host.encounter!=null){host.encounter.cancel();}else{host.rememberRally(engine.bestRally);screen="menu";paused=false;}invalidate();return true;}return false;}
     @Override protected void onDraw(Canvas canvas){
         long now=System.nanoTime();float dt=lastFrame==0?0:Math.min(.05f,(now-lastFrame)/1e9f);lastFrame=now;
-        if(!suspended){ambient+=dt;flash=Math.max(0,flash-dt);if(screen.equals("play")&&!paused){engine.update(dt);if(engine.phase==TableTennisEngine.Phase.MATCH_OVER&&!recorded){recorded=true;host.recordMatch(engine.matchWon(),engine.bestRally);}}}
+        if(!suspended){ambient+=dt;flash=Math.max(0,flash-dt);if(screen.equals("play")&&!paused&&(host.encounter==null||!host.encounter.isEnding())){
+            engine.update(dt);
+            if(host.encounter!=null)host.encounter.observe(engine.encounterProgress(host.encounter.plan.metric),false);
+            else if(engine.phase==TableTennisEngine.Phase.MATCH_OVER&&!recorded){recorded=true;host.recordMatch(engine.matchWon(),engine.bestRally);}
+        }}
         canvas.save();canvas.scale(scale,scale);buttons.clear();background(canvas);
-        if(screen.equals("menu"))menu(canvas);else{court(canvas);hud(canvas);if(engine.phase==TableTennisEngine.Phase.MATCH_OVER)result(canvas);else if(paused)pause(canvas);}
+        if(screen.equals("menu"))menu(canvas);else{court(canvas);hud(canvas);if(host.encounter==null&&engine.phase==TableTennisEngine.Phase.MATCH_OVER)result(canvas);else if(paused)pause(canvas);
+            if(host.encounter!=null&&!paused){host.encounter.draw(canvas,24,top+148,352);if(host.encounter.isEnding())buttons.clear();}}
         canvas.restore();if(!suspended)postInvalidateOnAnimation();
     }
     private void background(Canvas c){
@@ -142,7 +149,7 @@ public final class TableTennisView extends View {
         round(c,24,top+40,352,98,20,0xcb102b30);
         textCenter(c,"你",95,top+64,10,MUTED,NORMAL);textCenter(c,"对手",305,top+64,10,MUTED,NORMAL);
         textCenter(c,String.valueOf(engine.playerScore),95,top+112,39,INK,MEDIUM);textCenter(c,String.valueOf(engine.aiScore),305,top+112,39,INK,MEDIUM);
-        textCenter(c,"11 分",200,top+82,11,MINT,MONO);textCenter(c,"领先 2 分",200,top+106,9,MUTED,NORMAL);
+        textCenter(c,host.encounter==null?"11 分":"随机奇遇",200,top+82,11,MINT,MONO);textCenter(c,host.encounter==null?"领先 2 分":"达标自动返回",200,top+106,9,MUTED,NORMAL);
         float y=h-bottom-159;
         textCenter(c,engine.rally>=3?"RALLY  "+engine.rally:"找到下一拍的节奏",200,y,engine.rally>=3?20:13,engine.rally>=3?MINT:INK,engine.rally>=3?MONO:MEDIUM);
         textCenter(c,"左右拖动，球拍会跟手移动",200,y+28,11,MUTED,NORMAL);
@@ -164,8 +171,8 @@ public final class TableTennisView extends View {
         button(c,"resume",49,y+116,302,50,"继续比赛",true);
         button(c,"sound",49,y+181,145,39,"声音 "+(host.preferences.getBoolean("sound",true)?"开":"关"),false);
         button(c,"haptics",206,y+181,145,39,"触感 "+(host.preferences.getBoolean("haptics",true)?"开":"关"),false);
-        button(c,"menu",49,y+235,302,44,"返回球馆",false);
-        button(c,"home",49,y+286,302,35,"返回游戏集",false);
+        if(host.encounter!=null)button(c,"home",49,y+235,302,44,"结束奇遇，返回碰界",false);
+        else{button(c,"menu",49,y+235,302,44,"返回球馆",false);button(c,"home",49,y+286,302,35,"返回游戏集",false);}
     }
     private void result(Canvas c){
         overlay(c);float y=(h-353)/2;round(c,27,y,346,353,27,0xff142d33);
@@ -181,6 +188,7 @@ public final class TableTennisView extends View {
         textCenter(c,label,x+w/2,y+hh/2+4.5f,hh>44?15:12,primary?0xff102b2a:INK,MEDIUM);buttons.add(new Button(id,x,y,w,hh));
     }
     @Override public boolean onTouchEvent(MotionEvent event){
+        if(host.encounter!=null&&host.encounter.isEnding())return true;
         float x=event.getX()/scale,y=event.getY()/scale;int action=event.getActionMasked();
         if(action==MotionEvent.ACTION_DOWN){activePointer=event.getPointerId(0);pressed="";for(int i=buttons.size()-1;i>=0;i--)if(buttons.get(i).rect.contains(x,y)){pressed=buttons.get(i).id;break;}
             if(pressed.isEmpty()&&screen.equals("play")&&!paused){engine.setPlayerTarget((x-200)/160f*.86f);if(engine.phase==TableTennisEngine.Phase.SERVE)engine.serve();}invalidate();return true;}
@@ -190,6 +198,7 @@ public final class TableTennisView extends View {
     }
     @Override public boolean performClick(){super.performClick();return true;}
     private void activate(String id){
+        if(host.encounter!=null&&(id.equals("menu")||id.equals("home"))){host.encounter.cancel();return;}
         host.feedback("tap");
         if(id.startsWith("difficulty")){difficulty=Integer.parseInt(id.substring(10));return;}
         switch(id){case "start":startMatch(difficulty);break;case "pause":paused=true;break;case "resume":resumeMatch();break;case "menu":host.rememberRally(engine.bestRally);screen="menu";paused=false;break;case "home":host.finish();break;

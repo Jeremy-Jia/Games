@@ -163,8 +163,10 @@ public final class BrickEngineTest {
         engine.events.add(new GameEngine.Event(GameEngine.Kind.SURPRISE, 230, 450, 50, 2, null, 4, 0, 0, burst));
         engine.wideUntil = 8; engine.slowUntil = 9; engine.cometUntil = 10; engine.prismUntil = 11;
         engine.combo = 7; engine.nextOrbAt = 6; engine.paddleVelocity = 27;
+        engine.portalGame=4;engine.portalMetric=1;engine.portalTarget=5000000000L;engine.portalDifficulty=123;engine.portalSeed=-78;
         String snapshot = engine.snapshot(); check(snapshot != null && snapshot.startsWith("BRICKZEN_PORTAL_V1:"), "versioned snapshot encoded");
         GameEngine copy = GameEngine.fromSnapshot(snapshot); check(copy != null, "snapshot decoded");
+        check(copy.portalGame==4&&copy.portalMetric==1&&copy.portalTarget==5000000000L&&copy.portalDifficulty==123&&copy.portalSeed==-78,"entire random encounter survives checkpoint without reroll");
         check(copy.state == engine.state && copy.beforePause == engine.beforePause && copy.portalActive
                 && !copy.portalPending && copy.portalId.equals(engine.portalId), "handoff identity and pause restored");
         check(copy.score == engine.score && copy.lives == engine.lives && copy.time == engine.time && copy.combo == engine.combo

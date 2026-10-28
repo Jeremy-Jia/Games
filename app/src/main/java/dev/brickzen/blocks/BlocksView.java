@@ -14,6 +14,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import java.util.ArrayList;
 import java.util.Locale;
+import dev.brickzen.arcade.EncounterSession;
 
 /** Portrait arcade board. Everything, including the jewel pieces, is drawn at device resolution. */
 public final class BlocksView extends View {
@@ -21,12 +22,14 @@ public final class BlocksView extends View {
         int bestScore();int bestLines();boolean soundEnabled();boolean hapticsEnabled();
         void setSound(boolean value);void setHaptics(boolean value);void started();void record(int score,int lines);
         void feedback(String event);void quit();
+        default EncounterSession encounter(){return null;}
     }
     private static final int BG=0xff081a21,PANEL=0xff132b32,WHITE=0xffeff7f0,MUTED=0xff8da7a9,MINT=0xffb1eed4,GOLD=0xffeed7a6;
     private static final int[] COLORS={0,0xff82c6d8,0xffe9d3a0,0xffbaa5da,0xff9bcba9,0xffe3a0a3,0xff91acdc,0xffe5b38e};
     private static final Typeface REG=Typeface.create("sans-serif",0),MED=Typeface.create("sans-serif-medium",0),LIGHT=Typeface.create("sans-serif-light",0),MONO=Typeface.create("monospace",0);
     public final BlocksEngine engine;
     private final Host host;
+    private final EncounterSession encounter;
     private final Paint paint=new Paint(3);
     private final RectF rect=new RectF();
     private final Path path=new Path();
@@ -34,7 +37,7 @@ public final class BlocksView extends View {
     private float scale=1,h=850,top=26,bottom=16,boardX,boardY,cell,controlsY,clock;
     private int insetTop,insetBottom;
     private long lastFrame;
-    private boolean home=true,help,suspended=true,recorded;
+    private boolean home=true,help,suspended=true,recorded,encounterStarted;
     private String pressed,repeatAction;
     private float downX,downY,lastTouchX,lastTouchY;
     private boolean boardGesture,gestureMoved;
@@ -46,7 +49,7 @@ public final class BlocksView extends View {
         if(repeatAction!=null&&!suspended&&engine.phase==BlocksEngine.Phase.PLAYING){performAction(repeatAction);postDelayed(this,75);}
     }};
     public BlocksView(Context context,Host host){
-        super(context);this.host=host;engine=new BlocksEngine(host::feedback);
+        super(context);this.host=host;encounter=host.encounter();engine=new BlocksEngine(host::feedback);
         setFocusable(true);setClickable(true);setContentDescription("叠界，俄罗斯方块。下方按钮左右移动、旋转、软降和直落；右侧可暂存方块。顶部暂停。");
         setOnApplyWindowInsetsListener((v,insets)->{
             insetTop=insets.getSystemWindowInsetTop();insetBottom=insets.getSystemWindowInsetBottom();
@@ -57,12 +60,16 @@ public final class BlocksView extends View {
     @Override protected void onSizeChanged(int width,int height,int oldw,int oldh){scale=width/400f;h=height/scale;updateLayout();requestApplyInsets();}
     private void updateLayout(){
         top=Math.max(24,insetTop/Math.max(.01f,scale)+8);bottom=Math.max(14,insetBottom/Math.max(.01f,scale)+6);
-        controlsY=h-bottom-132;boardY=top+119;cell=Math.min(24,Math.max(10,(controlsY-boardY-20)/20));boardX=24;
+        controlsY=h-bottom-132;boardY=top+119+(encounter!=null?62:0);cell=Math.min(24,Math.max(10,(controlsY-boardY-20)/20));boardX=24;
     }
     public void startRun(long seed){
-        cancelRepeats();home=false;help=false;recorded=false;engine.start(seed);host.started();lastFrame=0;invalidate();
+        cancelRepeats();home=false;help=false;recorded=false;
+        if(encounter!=null){encounterStarted=true;engine.startEncounter(encounter.plan.seed,encounter.plan.difficulty);}else engine.start(seed);
+        host.started();lastFrame=0;updateLayout();invalidate();
     }
     public boolean performAction(String action){
+        if(encounter!=null&&encounter.isEnding())return false;
+        if(encounter!=null&&(action.equals("home")||action.equals("quit"))){cancelRepeats();encounter.cancel();return true;}
         boolean result=true;
         switch(action){
             case "start":case "restart":startRun(System.nanoTime());break;
@@ -86,7 +93,7 @@ public final class BlocksView extends View {
     }
     public RectF getActionBounds(String action){for(Button button:buttons)if(button.action.equals(action))return new RectF(button.bounds);return null;}
     public void onHostPause(){suspended=true;engine.pause();cancelRepeats();lastFrame=0;invalidate();}
-    public void onHostResume(){suspended=false;lastFrame=0;invalidate();}
+    public void onHostResume(){suspended=false;lastFrame=0;if(encounter!=null&&!encounterStarted)startRun(encounter.plan.seed);invalidate();}
     public boolean handleBack(){if(help){help=false;invalidate();return true;}if(home)return false;if(engine.phase==BlocksEngine.Phase.PLAYING)performAction("pause");else performAction("home");return true;}
     private void cancelRepeats(){repeatAction=null;pressed=null;removeCallbacks(repeater);boardGesture=false;}
     @Override protected void onDetachedFromWindow(){cancelRepeats();super.onDetachedFromWindow();}
@@ -94,11 +101,13 @@ public final class BlocksView extends View {
         super.onDraw(canvas);if(getWidth()==0)return;
         long now=SystemClock.elapsedRealtimeNanos();float dt=lastFrame==0?0:Math.min(.04f,(now-lastFrame)/1_000_000_000f);lastFrame=now;
         if(suspended)dt=0;clock+=dt;
-        if(!home&&!help&&!suspended)engine.update(dt);
-        if(!home&&engine.phase==BlocksEngine.Phase.OVER&&!recorded){host.record(engine.score,engine.lines);recorded=true;}
+        if(!home&&!help&&!suspended&&(encounter==null||!encounter.isEnding()))engine.update(dt);
+        if(encounter!=null&&encounterStarted&&!suspended){encounter.observe(engine.objectiveProgress(encounter.plan.metric),engine.phase==BlocksEngine.Phase.OVER);if(encounter.isEnding())cancelRepeats();}
+        if(encounter==null&&!home&&engine.phase==BlocksEngine.Phase.OVER&&!recorded){host.record(engine.score,engine.lines);recorded=true;}
         buttons.clear();canvas.save();canvas.scale(scale,scale);
         paint.setShader(new LinearGradient(0,0,400,h,0xff143039,BG,Shader.TileMode.CLAMP));canvas.drawRect(0,0,400,h,paint);paint.setShader(null);
-        if(home)drawHome(canvas);else{drawGame(canvas);if(engine.phase==BlocksEngine.Phase.PAUSED)drawPause(canvas);else if(engine.phase==BlocksEngine.Phase.OVER)drawOver(canvas);}
+        if(home)drawHome(canvas);else{drawGame(canvas);if(engine.phase==BlocksEngine.Phase.PAUSED)drawPause(canvas);else if(encounter==null&&engine.phase==BlocksEngine.Phase.OVER)drawOver(canvas);}
+        if(encounter!=null&&encounterStarted){encounter.draw(canvas,24,top+108,352);if(encounter.isEnding())buttons.clear();}
         if(help)drawHelp(canvas);
         canvas.restore();if(!suspended)postInvalidateOnAnimation();
     }
@@ -177,8 +186,8 @@ public final class BlocksView extends View {
         text(c,"让灵感歇一会",200,y+43,29,WHITE,LIGHT,Paint.Align.CENTER);
         text(c,"方块会等你，计时已经暂停。",200,y+74,11,MUTED,REG,Paint.Align.CENTER);
         button(c,"resume",40,y+106,320,56,"继续堆叠",true);
-        button(c,"restart",40,y+173,320,48,"重新开始",false);
-        button(c,"home",40,y+231,320,45,"返回叠界",false);
+        if(encounter!=null)button(c,"home",40,y+180,320,48,"结束奇遇，返回碰界",false);
+        else{button(c,"restart",40,y+173,320,48,"重新开始",false);button(c,"home",40,y+231,320,45,"返回叠界",false);}
     }
     private void drawOver(Canvas c){
         overlay(c);buttons.clear();float y=Math.max(top+30,(h-370)/2);
@@ -242,6 +251,7 @@ public final class BlocksView extends View {
     }
     private static int alpha(int color,int alpha){return(color&0x00ffffff)|(Math.max(0,Math.min(255,alpha))<<24);}
     @Override public boolean onTouchEvent(MotionEvent event){
+        if(encounter!=null&&encounter.isEnding()){cancelRepeats();return true;}
         if(suspended)return true;float px=event.getX()/scale,py=event.getY()/scale;
         switch(event.getActionMasked()){
             case MotionEvent.ACTION_DOWN:

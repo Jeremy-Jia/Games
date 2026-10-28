@@ -39,6 +39,7 @@ public final class BlocksEngine {
     public final List<Integer> next = new ArrayList<>();
     public Phase phase = Phase.READY;
     public int type, rotation, x, y, heldType, score, lines, level = 1, combo = -1, lockedPieces;
+    public long totalLines, totalLockedPieces;
     public boolean holdAvailable = true, backToBack;
     public float time, clearFx;
     public int[] lastClearedRows = new int[0];
@@ -46,6 +47,7 @@ public final class BlocksEngine {
     private Random random = new Random(1);
     private float gravity, lockTimer;
     private int lockResets;
+    private int startingLevel=1;
 
     public BlocksEngine() { this(null); }
     public BlocksEngine(Listener listener) { this.listener = listener; }
@@ -53,11 +55,16 @@ public final class BlocksEngine {
     public void start(long seed) {
         random = new Random(seed); next.clear();
         for (int[] row : board) java.util.Arrays.fill(row,0);
-        score = lines = lockedPieces = heldType = 0; level = 1; combo = -1;
+        score = lines = lockedPieces = heldType = 0; startingLevel=level=1; totalLines=totalLockedPieces=0; combo = -1;
         backToBack = false; holdAvailable = true; time = clearFx = 0;
         lastClearedRows = new int[0]; phase = Phase.PLAYING;
         fillQueue(); spawn(next.remove(0)); fillQueue(); event("start");
     }
+    /** Encounter tiers are continuous positive levels, independent of the target size. */
+    public void startEncounter(long seed,int difficulty){
+        start(seed);startingLevel=level=Math.max(1,difficulty);
+    }
+    public long objectiveProgress(int metric){return metric==0?Math.max(totalLines,(long)lines):Math.max(totalLockedPieces,(long)lockedPieces);}
     private void fillQueue() {
         while (next.size() < 7) {
             ArrayList<Integer> bag = new ArrayList<>();
@@ -124,11 +131,11 @@ public final class BlocksEngine {
     }
     public boolean softDrop() {
         if (phase != Phase.PLAYING || !fits(type,rotation,x,y+1)) return false;
-        y++; score++; gravity=0; lockTimer=0; return true;
+        y++; addScore(1); gravity=0; lockTimer=0; return true;
     }
     public boolean hardDrop() {
         if (phase != Phase.PLAYING) return false;
-        int landing=ghostY(); score+=(landing-y)*2; y=landing; lock(); event("drop"); return true;
+        int landing=ghostY(); addScore((landing-y)*2L); y=landing; lock(); event("drop"); return true;
     }
     public boolean hold() {
         if (phase != Phase.PLAYING || !holdAvailable) return false;
@@ -155,7 +162,8 @@ public final class BlocksEngine {
         int[][] cells=cells();
         for (int[] cell : cells) if (cell[1]<0) { finish(); return; }
         for (int[] cell : cells) board[cell[1]][cell[0]]=type;
-        lockedPieces++; ArrayList<Integer> cleared=new ArrayList<>();
+        totalLines=Math.max(totalLines,(long)lines);totalLockedPieces=Math.max(totalLockedPieces,(long)lockedPieces);
+        if(totalLockedPieces<Long.MAX_VALUE)totalLockedPieces++;lockedPieces=(int)Math.min(Integer.MAX_VALUE,totalLockedPieces);ArrayList<Integer> cleared=new ArrayList<>();
         for (int row=0;row<ROWS;row++) {
             boolean full=true;
             for (int column=0;column<COLUMNS;column++) if (board[row][column]==0) { full=false; break; }
@@ -171,12 +179,15 @@ public final class BlocksEngine {
             int[] points={0,100,300,500,800};
             int base=points[Math.min(4,count)];
             if(count==4 && backToBack)base=base*3/2;
-            combo++; score+=(base+Math.max(0,combo)*50)*level;
-            backToBack=count==4; lines+=count; level=1+lines/10;clearFx=1;
+            if(combo<Integer.MAX_VALUE)combo++;long awarded=(long)base+Math.max(0L,(long)combo)*50;
+            addScore(awarded>Integer.MAX_VALUE/(long)level?Integer.MAX_VALUE:awarded*level);
+            backToBack=count==4;totalLines=totalLines>Long.MAX_VALUE-count?Long.MAX_VALUE:totalLines+count;
+            lines=(int)Math.min(Integer.MAX_VALUE,totalLines);level=(int)Math.min(Integer.MAX_VALUE,(long)startingLevel+totalLines/10);clearFx=1;
             event(count==4?"tetris":"clear");
         } else { combo=-1; event("lock"); }
         holdAvailable=true; spawn(next.remove(0)); fillQueue();
     }
     private void finish() { if(phase!=Phase.OVER){phase=Phase.OVER;event("over");} }
+    private void addScore(long amount){score=(int)Math.min(Integer.MAX_VALUE,(long)score+Math.max(0,amount));}
     private void event(String event) { if(listener!=null)listener.onEvent(event); }
 }

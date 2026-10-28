@@ -12,17 +12,21 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import dev.brickzen.arcade.EncounterPlan;
+import dev.brickzen.arcade.EncounterSession;
 
 /** Only Android lifecycle, local preferences and foreground feedback live here. */
 public final class TableTennisActivity extends Activity {
     public TableTennisView game;
     public SharedPreferences preferences;
+    public EncounterSession encounter;
     private ToneGenerator tones;
     private Vibrator vibrator;
     private boolean foreground;
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
         preferences=getSharedPreferences("table_tennis",MODE_PRIVATE);
+        encounter=EncounterSession.from(this,EncounterPlan.TENNIS);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         if(Build.VERSION.SDK_INT>=28){WindowManager.LayoutParams a=getWindow().getAttributes();a.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(a);}
@@ -58,11 +62,13 @@ public final class TableTennisActivity extends Activity {
         }
     }
     public void recordMatch(boolean won,int rally){
+        if(encounter!=null)return;
         preferences.edit().putInt("matches",preferences.getInt("matches",0)+1)
                 .putInt("wins",preferences.getInt("wins",0)+(won?1:0))
                 .putInt("best_streak",Math.max(rally,preferences.getInt("best_streak",0))).apply();
     }
     public void rememberRally(int rally){
+        if(encounter!=null)return;
         if(rally>preferences.getInt("best_streak",0))preferences.edit().putInt("best_streak",rally).apply();
     }
 }

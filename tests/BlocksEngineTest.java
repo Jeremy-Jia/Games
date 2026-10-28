@@ -6,7 +6,7 @@ import java.util.HashSet;
 /** Pure Java mechanic checks; no Android or external test framework. */
 public final class BlocksEngineTest {
     public static void main(String[] args){
-        sevenBag();wallAndFloorKicks();holdAndDrop();lineClearAndScoring();lockDelayAndPause();topOut();invalidTime();deterministic();
+        sevenBag();wallAndFloorKicks();holdAndDrop();lineClearAndScoring();lockDelayAndPause();topOut();invalidTime();deterministic();encounterLevelsAndCounters();
         System.out.println("PASS: blocks 7-bag, SRS wall/floor kicks, hold lockout, ghost/hard drop, line clears/combo/B2B, lock delay/pause, top-out, bounded clock, deterministic replay");
     }
     private static void sevenBag(){
@@ -92,6 +92,21 @@ public final class BlocksEngineTest {
         }
         check(a.score==b.score&&a.lines==b.lines&&a.type==b.type&&a.phase==b.phase&&a.next.equals(b.next),"seed and inputs reproduce run");
         for(int row=0;row<20;row++)check(Arrays.equals(a.board[row],b.board[row]),"deterministic board");
+    }
+    private static void encounterLevelsAndCounters(){
+        BlocksEngine normal=new BlocksEngine(),encounter=new BlocksEngine();normal.start(42);encounter.startEncounter(42,8);
+        check(encounter.level==8&&encounter.fallInterval()<normal.fallInterval(),"encounter difficulty is a starting level, not a three-tier preset");
+        for(int frame=0;frame<8;frame++){normal.update(.05f);encounter.update(.05f);}
+        check(encounter.y>normal.y,"higher encounter tier actually advances gravity faster");
+        prepareTetris(encounter);encounter.hardDrop();prepareTetris(encounter);encounter.hardDrop();prepareTetris(encounter);encounter.hardDrop();
+        check(encounter.level==9&&encounter.totalLines==12,"starting difficulty remains after earned levels");
+        encounter.totalLines=3_000_000_000L;encounter.lines=Integer.MAX_VALUE;encounter.totalLockedPieces=3_000_000_000L;encounter.lockedPieces=Integer.MAX_VALUE;
+        prepareTetris(encounter);encounter.hardDrop();
+        check(encounter.objectiveProgress(0)==3_000_000_004L&&encounter.objectiveProgress(1)==3_000_000_001L,"objective counters continue beyond int display range");
+        check(encounter.score>=0&&encounter.lines==Integer.MAX_VALUE,"large objective progress cannot wrap UI values negative");
+        encounter.startEncounter(4,Integer.MAX_VALUE);encounter.combo=Integer.MAX_VALUE;prepareTetris(encounter);encounter.hardDrop();
+        check(encounter.level==Integer.MAX_VALUE&&encounter.score==Integer.MAX_VALUE,"large tiers use saturating score and level arithmetic");
+        encounter.start(42);check(encounter.level==1&&encounter.fallInterval()==.8f&&encounter.totalLines==0&&encounter.totalLockedPieces==0,"ordinary restart fully resets encounter state");
     }
     private static void check(boolean condition,String message){if(!condition)throw new AssertionError(message);}
 }

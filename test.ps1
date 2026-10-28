@@ -23,16 +23,18 @@ $sources = @(
     'app\src\main\java\dev\brickzen\blocks\BlocksEngine.java',
     'app\src\main\java\dev\brickzen\hillclimb\HillClimbEngine.java',
     'app\src\main\java\dev\brickzen\range\RangeEngine.java',
+    'app\src\main\java\dev\brickzen\arcade\EncounterPlan.java',
     'tests\BrickEngineTest.java',
     'tests\GameEngineTest.java',
     'tests\TableTennisEngineTest.java',
     'tests\BlocksEngineTest.java',
     'tests\HillClimbEngineTest.java',
-    'tests\RangeEngineTest.java'
+    'tests\RangeEngineTest.java',
+    'tests\EncounterPlanTest.java'
 ) | ForEach-Object { Join-Path $PSScriptRoot $_ }
 & $compiler -encoding UTF-8 -d $testDirectory @sources
 if ($LASTEXITCODE -ne 0) { throw "Engine test compilation failed ($LASTEXITCODE)." }
-foreach ($testClass in @('dev.brickzen.app.BrickEngineTest', 'GameEngineTest', 'TableTennisEngineTest', 'BlocksEngineTest', 'HillClimbEngineTest', 'RangeEngineTest')) {
+foreach ($testClass in @('dev.brickzen.app.BrickEngineTest', 'GameEngineTest', 'TableTennisEngineTest', 'BlocksEngineTest', 'HillClimbEngineTest', 'RangeEngineTest', 'EncounterPlanTest')) {
     & $runtime -ea -cp $testDirectory $testClass
     if ($LASTEXITCODE -ne 0) { throw "$testClass failed ($LASTEXITCODE)." }
 }

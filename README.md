@@ -1,18 +1,20 @@
 # SIX GAMES
 
-一个完全离线的 Android 小游戏集：碰界打砖块、星隙太空生存、弧线 3D 乒乓球、叠界俄罗斯方块、野径登山赛车、准星狙击打靶。六张卡片直接进入各款游戏，神秘砖块把碰界与星隙串成连续奇遇。
+一个完全离线的 Android 小游戏集：碰界打砖块、星隙太空生存、弧线 3D 乒乓球、叠界俄罗斯方块、野径登山赛车、准星狙击打靶。六张卡片直接进入各款游戏，神秘砖块能随机打开其余五款游戏的目标奇遇。
 
-版本：**2.4.0**（`versionCode 11`）
+版本：**2.5.0**（`versionCode 12`）
 
 包名：`dev.brickzen.app`
 
 仓库：[Jeremy-Jia/Games](https://github.com/Jeremy-Jia/Games)
 
-[下载当前 APK](releases/Games-2.4.0-release.apk)
+[下载当前 APK](releases/Games-2.5.0-release.apk)
 
 <img src="docs/verification/2.4.0/collection-top.png" width="230" alt="SIX GAMES 首页">
 
 <img src="docs/verification/2.4.0/hill-play.png" width="460" alt="横屏登山赛车"> <img src="docs/verification/2.4.0/range-play.png" width="460" alt="狙击打靶">
+
+<img src="docs/verification/2.5.0/goal-1.png" width="230" alt="随机回球目标"> <img src="docs/verification/2.5.0/goal-2.png" width="230" alt="随机方块目标"> <img src="docs/verification/2.5.0/return-2.png" width="230" alt="达标后继续打砖块">
 
 ## 六种玩法，一个入口
 
@@ -24,11 +26,13 @@
 | 叠界 | 10×20 俄罗斯方块，7 袋随机、墙踢旋转、暂存、落点预览、软降／直落、连消与逐级提速；支持按钮与手势。 |
 | 野径 | 横屏登山赛车，按住油门／刹车、双轮悬挂、腾空平衡、连续起伏山路、金币与燃油补给。 |
 | 准星 | 横屏打靶，1×／3×／6×瞄准镜、拖动瞄准、按住屏息、后坐力、装填、逐步增加距离及移动靶，10 发一轮。 |
-| 神秘砖块 | 随机藏在砖阵内部，避开最先接触的一排。击中后自动进入星隙，闯过四波敌人与最终 Boss；升级自动装配，结束自动发奖、返回并继续打球。 |
+| 神秘砖块 | 随机藏在砖阵内部，避开最先接触的一排。击中后等概率进入其余五款游戏之一，随机生成目标与难度；达标自动发奖、返回并继续打球。 |
 
-奇遇带回的额外分数限制在 `0–3000` 分。击败 Boss 还能获得 14 秒加宽挡板与满格能量；主动取消不会获得奖励，也不会扣除碰界的生命。成功、失败或提前退出都会自动返回原局，不需要领奖或点击继续。
+奇遇带回的额外分数限制在 `0–3000` 分。达成目标还能获得 14 秒加宽挡板与满格能量；主动取消不会获得奖励，也不会扣除碰界的生命。成功、失败或提前退出都会自动返回原局，不需要领奖或点击继续。
 
-2.2 按每波击破目标推进，最后才出现 Boss；不会因到达 30 秒或三分钟自动结束。敌人组合和弹幕逐波增强，界面显示当前目标与 Boss 血条。普通航程保留手动选择升级，奇遇保持连续战斗。障碍不会计入清关目标，也不会被道具消除。
+奇遇的游戏、目标类型和难度分别随机。星隙可抽到击破或得分，乒乓球可抽到赢分或连续回击，方块可抽到消行或放置数量，赛车可抽到距离或金币，打靶可抽到命中数或得分。每次都显示任务、难度和进度；难度采用长尾随机生成，没有固定预设档位上限，较高目标更罕见。不会用 30 秒、11 分、10 发或固定波次提前结束目标奇遇。
+
+首页直接进入时保持各游戏原来的普通规则。奇遇不计入普通模式的纪录；目标与难度跟随碰界原局保存，恢复时不会重新抽取。小游戏运行中的进度仍不跨进程保存；已写入的完成结果会优先恢复，避免成功后因页面重建而重玩或被取消覆盖。
 
 应用没有广告、账号、联网功能或 Root 要求。仅使用震动权限；六款游戏各自保存设置和纪录。集锦入口沿用碰界的外观设置。桌面应用名和首页标题均为 **SIX GAMES**。
 
@@ -38,7 +42,7 @@
 
 ## 安装与存档
 
-发布包位于 `releases/Games-2.4.0-release.apk`；自行构建的 APK 位于 `app/build/outputs/apk/`。
+发布包位于 `releases/Games-2.5.0-release.apk`；自行构建的 APK 位于 `app/build/outputs/apk/`。
 
 集锦继续使用原碰界包名和私有存档名 `brickzen`。**同包名、同签名的覆盖升级**可以保留原来的关卡、纪录与设置。签名不同的 APK 无法直接覆盖，不能通过先卸载来假定存档仍会保留。签名密钥与用户个人存档均不在本仓库中。
 
@@ -96,15 +100,17 @@ javac -encoding UTF-8 -d build/engine-tests `
   app/src/main/java/dev/brickzen/blocks/BlocksEngine.java `
   app/src/main/java/dev/brickzen/hillclimb/HillClimbEngine.java `
   app/src/main/java/dev/brickzen/range/RangeEngine.java `
+  app/src/main/java/dev/brickzen/arcade/EncounterPlan.java `
   tests/BrickEngineTest.java tests/GameEngineTest.java tests/BalanceProbe.java `
   tests/TableTennisEngineTest.java tests/BlocksEngineTest.java `
-  tests/HillClimbEngineTest.java tests/RangeEngineTest.java
+  tests/HillClimbEngineTest.java tests/RangeEngineTest.java tests/EncounterPlanTest.java
 java -cp build/engine-tests dev.brickzen.app.BrickEngineTest
 java -cp build/engine-tests GameEngineTest
 java -cp build/engine-tests TableTennisEngineTest
 java -cp build/engine-tests BlocksEngineTest
 java -cp build/engine-tests HillClimbEngineTest
 java -cp build/engine-tests RangeEngineTest
+java -cp build/engine-tests EncounterPlanTest
 java -cp build/engine-tests BalanceProbe
 ```
 
@@ -112,7 +118,9 @@ java -cp build/engine-tests BalanceProbe
 
 `test.ps1` 可一次运行六套引擎回归。测试还覆盖乒乓球的三维回球／球网／得分／加分赛、方块的 7 袋和旋转踢墙、赛车的双轮接地／刹车／燃油／翻覆，以及打靶的命中／弹匣／屏息／移动靶与轮次结算。
 
-最新验收见 [2.4.0 记录](docs/verification/2.4.0.md)，乒乓球与方块初版见 [2.3.0](docs/verification/2.3.0.md)，完整 Boss 往返见 [2.2.0](docs/verification/2.2.0.md)。此前小米 15 限时版本记录保留在 [2.1.0](docs/verification/2.1.0.md)，初版恢复与集成记录见 [2.0.0](docs/verification/REPORT.md)。
+另有 `EncounterPlanTest` 验证 60,000 个目标的五款游戏／两种指标覆盖、长尾难度、长整数目标和同一奇遇不可重抽；各引擎验证了超过旧有波次、11 分和 10 发限制后的继续运行。
+
+最新随机奇遇验收见 [2.5.0](docs/verification/2.5.0.md)，赛车与打靶初版见 [2.4.0](docs/verification/2.4.0.md)，乒乓球与方块初版见 [2.3.0](docs/verification/2.3.0.md)，旧 Boss 往返见 [2.2.0](docs/verification/2.2.0.md)。更早记录保留在 [2.1.0](docs/verification/2.1.0.md) 与 [2.0.0](docs/verification/REPORT.md)。
 
 原生往返测试使用 Android 自带 `Instrumentation`，无需第三方测试依赖：
 
@@ -150,6 +158,7 @@ app/src/main/java/
 ├── dev/brickzen/blocks/              叠界方块规则、界面与宿主
 ├── dev/brickzen/hillclimb/           野径车辆物理、山路绘制与横屏宿主
 ├── dev/brickzen/range/               准星弹道、靶场绘制与横屏宿主
+├── dev/brickzen/arcade/              随机目标模型、目标栏与统一奖励返回协议
 └── io/github/jeremyjia/stardrift/     星隙引擎、界面、宿主与程序生成音效
 app/src/main/res/                    碰界恢复资源与集锦主题
 tests/                              纯 Java 回归与平衡探针

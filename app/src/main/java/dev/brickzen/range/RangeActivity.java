@@ -12,15 +12,19 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import dev.brickzen.arcade.EncounterPlan;
+import dev.brickzen.arcade.EncounterSession;
 
 public final class RangeActivity extends Activity {
     public RangeView game;
     public SharedPreferences preferences;
+    public EncounterSession encounter;
     private ToneGenerator tones;
     private Vibrator vibrator;
     private boolean foreground;
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);preferences=getSharedPreferences("target_range",MODE_PRIVATE);
+        encounter=EncounterSession.from(this,EncounterPlan.RANGE);if(isFinishing())return;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         if(Build.VERSION.SDK_INT>=28){WindowManager.LayoutParams a=getWindow().getAttributes();a.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(a);}
@@ -40,7 +44,7 @@ public final class RangeActivity extends Activity {
         if(active)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);else{getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);if(tones!=null)tones.stopTone();if(vibrator!=null)vibrator.cancel();}}
     @Override public void onBackPressed(){if(game==null||!game.handleBack())super.onBackPressed();}
     @Override protected void onDestroy(){if(tones!=null){tones.release();tones=null;}super.onDestroy();}
-    public void record(int score,int accuracy){preferences.edit().putInt("best_score",Math.max(score,preferences.getInt("best_score",0)))
+    public void record(int score,int accuracy){if(encounter!=null)return;preferences.edit().putInt("best_score",Math.max(score,preferences.getInt("best_score",0)))
             .putInt("best_accuracy",Math.max(accuracy,preferences.getInt("best_accuracy",0))).putInt("rounds",preferences.getInt("rounds",0)+1).apply();}
     public void feedback(String name){
         if(!foreground||!hasWindowFocus())return;

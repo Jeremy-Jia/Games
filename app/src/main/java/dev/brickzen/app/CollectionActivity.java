@@ -77,11 +77,11 @@ public final class CollectionActivity extends Activity {
         gameRow(content,hill,range);space(content,20);
 
         LinearLayout portal=card(dark?0xff302d3d:0xffece8f3);portal.setPadding(dp(19),dp(17),dp(19),dp(17));
-        portal.addView(label("✦  砖块里，藏着另一片星空",13,dark?0xffded0f0:0xff6d587d,true));
-        TextView portalDesc=label("击中神秘砖块，闯过敌阵与 Boss，带奖励回来。",11,dark?0xffb6a8c4:0xff877592,false);gap(portalDesc,7);portal.addView(portalDesc);
+        portal.addView(label("✦  砖块里，藏着五种奇遇",13,dark?0xffded0f0:0xff6d587d,true));
+        TextView portalDesc=label("随机游戏、随机目标、随机难度，达标后自动回来。",11,dark?0xffb6a8c4:0xff877592,false);gap(portalDesc,7);portal.addView(portalDesc);
         portal.setContentDescription("了解神秘砖块和跨游戏奇遇");
         portal.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("偶遇另一种好玩")
-                .setMessage("神秘砖会随机藏在砖阵内部，避开最先接触的一排。击中它，会自动切入星隙挑战。\n\n击破四波敌阵，再迎战最终 Boss；没有时间限制，升级自动装配。结束后自动发放奖励、返回碰界并继续打球；击败 Boss 还会获得宽板和满格能量。\n\n砖阵更密，也有改变球路的反弹障碍。原来的砖块、小球、生命和分数都会保留。随时可主动暂停或提前结束奇遇。")
+                .setMessage("神秘砖随机藏在砖阵内部，避开最先接触的一排。击中后，会随机进入星隙、弧线、叠界、野径或准星。\n\n每次都会随机生成目标和难度，例如击破敌机、连续回球、消行、行驶或命中靶子。目标和难度没有固定档位上限，进入时会显示本次任务。没有倒计时强制结束；达标后自动发奖、返回并继续打球。\n\n原来的砖块、小球、生命和分数都会保留。中断重进仍保留同一个目标。失败或主动结束也会自动返回，提前结束不扣碰界生命。")
                 .setPositiveButton("去发现吧",null).show());
         content.addView(portal);space(content,24);
         TextView footer=label("完全离线  ·  无广告  ·  为短暂的空闲而做",10,muted,false);footer.setGravity(Gravity.CENTER);content.addView(footer);

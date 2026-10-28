@@ -15,17 +15,20 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import dev.brickzen.arcade.EncounterPlan;
+import dev.brickzen.arcade.EncounterSession;
 
 /** Android lifecycle, local records and short foreground-only feedback. */
 public final class HillClimbActivity extends Activity implements HillClimbView.Host {
     public HillClimbView game;
+    public EncounterSession encounter;
     private SharedPreferences preferences;
     private ToneGenerator sound;
     private Vibrator vibrator;
     private boolean foreground;
     private long lastSound;
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);preferences=getSharedPreferences("hill_climb",MODE_PRIVATE);setVolumeControlStream(AudioManager.STREAM_MUSIC);
+        super.onCreate(state);preferences=getSharedPreferences("hill_climb",MODE_PRIVATE);encounter=EncounterSession.from(this,EncounterPlan.HILL);setVolumeControlStream(AudioManager.STREAM_MUSIC);
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         if(Build.VERSION.SDK_INT>=29){getWindow().setNavigationBarContrastEnforced(false);getWindow().getDecorView().setForceDarkAllowed(false);}
         if(Build.VERSION.SDK_INT>=28){WindowManager.LayoutParams params=getWindow().getAttributes();params.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(params);}
@@ -49,9 +52,10 @@ public final class HillClimbActivity extends Activity implements HillClimbView.H
     @Override public boolean hapticsEnabled(){return preferences.getBoolean("haptics",true);}
     @Override public void setSound(boolean value){preferences.edit().putBoolean("sound",value).apply();if(!value&&sound!=null)sound.stopTone();}
     @Override public void setHaptics(boolean value){preferences.edit().putBoolean("haptics",value).apply();}
-    @Override public void started(){preferences.edit().putInt("runs",preferences.getInt("runs",0)+1).apply();}
-    @Override public void record(int distance,int coins){preferences.edit().putInt("best_distance",Math.max(bestDistance(),distance)).putInt("best_coins",Math.max(bestCoins(),coins)).apply();}
-    @Override public void quit(){finish();}
+    @Override public EncounterSession encounter(){return encounter;}
+    @Override public void started(){if(encounter==null)preferences.edit().putInt("runs",preferences.getInt("runs",0)+1).apply();}
+    @Override public void record(int distance,int coins){if(encounter==null)preferences.edit().putInt("best_distance",Math.max(bestDistance(),distance)).putInt("best_coins",Math.max(bestCoins(),coins)).apply();}
+    @Override public void quit(){if(encounter!=null)encounter.cancel();else finish();}
     @Override public void feedback(String event){
         if(!foreground||!hasWindowFocus())return;boolean heavy=event.equals("land")||event.equals("over");long now=SystemClock.elapsedRealtime();
         if(soundEnabled()&&sound!=null&&now-lastSound>90){lastSound=now;try{sound.startTone(event.equals("over")?ToneGenerator.TONE_PROP_NACK:event.equals("fuel")?ToneGenerator.TONE_PROP_ACK:ToneGenerator.TONE_PROP_BEEP,event.equals("over")?100:28);}catch(RuntimeException ignored){}}

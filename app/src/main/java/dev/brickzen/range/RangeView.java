@@ -29,7 +29,7 @@ public final class RangeView extends View {
     private final Path path=new Path();
     private final ArrayList<Button> buttons=new ArrayList<>();
     private final Map<Integer,String> pointers=new HashMap<>();
-    private boolean suspended=true,recorded;
+    private boolean suspended=true,recorded,encounterStarted;
     private long lastFrame;
     private float scale=1,h=430,left=25,right=25,top=24,bottom=15,ambient,flash;
     private int aimPointer=-1;
@@ -49,25 +49,42 @@ public final class RangeView extends View {
     public float getLogicalWidth(){return 900;}
     public float getLogicalHeight(){return h;}
     public RectF getActionBounds(String action){for(Button b:buttons)if(b.id.equals(action))return new RectF(b.rect);return null;}
-    public void startRound(long seed){engine.start(seed);screen="play";recorded=false;lastFrame=0;invalidate();}
+    public void startRound(long seed){
+        if(host.encounter==null)engine.start(seed);else engine.startEncounter(seed,host.encounter.plan.difficulty);
+        screen="play";recorded=false;lastFrame=0;invalidate();
+    }
     public boolean performAction(String action){boolean done=true;switch(action){
-        case "start":case "restart":startRound(System.nanoTime());break;
+        case "start":case "restart":if(host.encounter!=null){host.encounter.cancel();break;}startRound(System.nanoTime());break;
         case "fire":done=engine.fire();break;case "reload":done=engine.reload();break;case "zoom":engine.changeZoom();break;
         case "breath":engine.setHoldingBreath(!engine.holdingBreath);break;case "pause":engine.pause();break;case "resume":engine.resume();lastFrame=0;break;
-        case "menu":engine.pause();screen="menu";break;case "quit":host.finish();break;
+        case "menu":if(host.encounter!=null){host.encounter.cancel();break;}engine.pause();screen="menu";break;
+        case "quit":if(host.encounter!=null)host.encounter.cancel();else host.finish();break;
         case "sound":host.preferences.edit().putBoolean("sound",!host.preferences.getBoolean("sound",true)).apply();break;
         case "haptics":host.preferences.edit().putBoolean("haptics",!host.preferences.getBoolean("haptics",true)).apply();break;
         default:done=false;
     }invalidate();return done;}
     public void onHostPause(){suspended=true;engine.pause();pointers.clear();aimPointer=-1;lastFrame=0;invalidate();}
-    public void onHostResume(){suspended=false;lastFrame=0;invalidate();}
-    public boolean handleBack(){if(screen.equals("menu"))return false;if(engine.phase==RangeEngine.Phase.PLAYING)engine.pause();else screen="menu";invalidate();return true;}
+    public void onHostResume(){suspended=false;lastFrame=0;
+        if(host.encounter!=null&&!encounterStarted){encounterStarted=true;startRound(host.encounter.plan.seed);}
+        invalidate();
+    }
+    public boolean handleBack(){if(host.encounter!=null){if(!host.encounter.isEnding()){
+            if(engine.phase==RangeEngine.Phase.PLAYING)engine.pause();else host.encounter.cancel();
+        }invalidate();return true;}
+        if(screen.equals("menu"))return false;if(engine.phase==RangeEngine.Phase.PLAYING)engine.pause();else screen="menu";invalidate();return true;}
     @Override protected void onDraw(Canvas canvas){
         super.onDraw(canvas);long now=System.nanoTime();float dt=lastFrame==0?0:Math.min(.05f,(now-lastFrame)/1e9f);lastFrame=now;
-        if(!suspended){ambient+=dt;flash=Math.max(0,flash-dt);if(screen.equals("play"))engine.update(dt);}
-        if(screen.equals("play")&&engine.phase==RangeEngine.Phase.OVER&&!recorded){recorded=true;host.record(engine.score,engine.accuracy());}
+        if(!suspended){ambient+=dt;flash=Math.max(0,flash-dt);if(screen.equals("play")&&(host.encounter==null||!host.encounter.isEnding())){
+            engine.update(dt);
+            if(host.encounter!=null)host.encounter.observe(host.encounter.plan.metric==0?engine.encounterHits:engine.encounterScore,engine.phase==RangeEngine.Phase.OVER);
+        }}
+        if(host.encounter==null&&screen.equals("play")&&engine.phase==RangeEngine.Phase.OVER&&!recorded){recorded=true;host.record(engine.score,engine.accuracy());}
         canvas.save();canvas.scale(scale,scale);buttons.clear();landscape(canvas);drawTarget(canvas,450,h*.47f,130,false);
-        if(screen.equals("menu"))menu(canvas);else{play(canvas);if(engine.phase==RangeEngine.Phase.PAUSED)pause(canvas);else if(engine.phase==RangeEngine.Phase.OVER)result(canvas);}
+        if(screen.equals("menu"))menu(canvas);else{play(canvas);
+            if(host.encounter!=null)host.encounter.draw(canvas,left-4,top+58,252);
+            if(host.encounter!=null&&host.encounter.isEnding())buttons.clear();
+            else if(engine.phase==RangeEngine.Phase.PAUSED)pause(canvas);else if(engine.phase==RangeEngine.Phase.OVER)result(canvas);
+        }
         canvas.restore();if(!suspended)postInvalidateOnAnimation();
     }
     private void landscape(Canvas c){
@@ -139,7 +156,7 @@ public final class RangeView extends View {
         round(c,332,top-8,236,40,13,0xd510282a);
         text(c,Math.round(engine.distance)+" m  ·  "+(engine.movingTarget?"运动靶":"固定靶"),450,top+8,11,WHITE,MED,Paint.Align.CENTER);
         text(c,"风 "+(engine.wind<0?"←":"→")+String.format(Locale.US," %.1f",Math.abs(engine.wind)),450,top+23,8.5f,GOLD,MONO,Paint.Align.CENTER);
-        text(c,String.format(Locale.US,"%02d / 10",engine.shotsFired),900-right-137,top+13,18,WHITE,MONO,Paint.Align.RIGHT);
+        text(c,host.encounter==null?String.format(Locale.US,"%02d / 10",engine.shotsFired):engine.encounterShots+" 发",900-right-137,top+13,18,WHITE,MONO,Paint.Align.RIGHT);
         text(c,"弹匣 "+engine.ammo+" / 5",900-right-137,top+33,10,MUTED,REG,Paint.Align.RIGHT);
         button(c,"pause",900-right-55,top-6,55,40,"Ⅱ",false);
         float y=h-bottom-62;
@@ -159,7 +176,7 @@ public final class RangeView extends View {
         button(c,"resume",270,y+98,360,48,"继续瞄准",true);
         button(c,"sound",270,y+160,173,36,"声音 "+(host.preferences.getBoolean("sound",true)?"开":"关"),false);
         button(c,"haptics",457,y+160,173,36,"触感 "+(host.preferences.getBoolean("haptics",true)?"开":"关"),false);
-        button(c,"menu",270,y+215,173,42,"返回靶场",false);button(c,"quit",457,y+215,173,42,"返回游戏集",false);
+        button(c,"menu",270,y+215,173,42,host.encounter==null?"返回靶场":"结束奇遇",false);button(c,"quit",457,y+215,173,42,host.encounter==null?"返回游戏集":"返回碰界",false);
     }
     private void result(Canvas c){overlay(c);float y=(h-304)/2;round(c,220,y,460,304,26,0xff163036);
         text(c,"TEN SHOTS / 一次专注",450,y+33,9,MINT,MONO,Paint.Align.CENTER);text(c,"把这一轮，打漂亮",450,y+75,26,WHITE,REG,Paint.Align.CENTER);
@@ -168,6 +185,7 @@ public final class RangeView extends View {
         button(c,"restart",250,y+197,400,48,"再来一轮   ↗",true);button(c,"quit",250,y+255,400,33,"返回游戏集",false);
     }
     @Override public boolean onTouchEvent(MotionEvent event){
+        if(host.encounter!=null&&host.encounter.isEnding())return true;
         int action=event.getActionMasked(),index=event.getActionIndex(),id=event.getPointerId(index);float x=event.getX(index)/scale,y=event.getY(index)/scale;
         if(action==MotionEvent.ACTION_DOWN||action==MotionEvent.ACTION_POINTER_DOWN){
             String found="";for(int i=buttons.size()-1;i>=0;i--)if(buttons.get(i).rect.contains(x,y)){found=buttons.get(i).id;break;}

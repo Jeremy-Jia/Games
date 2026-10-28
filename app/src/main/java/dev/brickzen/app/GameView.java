@@ -321,7 +321,7 @@ final class GameView extends View {
                 this.accumulator = 0;
                 this.paddlePointer = -1;
                 this.pressed.clear();
-                post(() -> ((MainActivity) getContext()).openStarPortal());
+                post(() -> ((MainActivity) getContext()).openRandomPortal());
             }
         }
         canvas.drawColor(this.appearance.background);
@@ -1033,14 +1033,14 @@ final class GameView extends View {
         box(canvas,73,y+12,854,panelHeight,57,186138422);
         box(canvas,73,y,854,panelHeight,57,-1);
         center(canvas,portal?"发现神秘航道":paused?"已暂停":cleared?"关卡完成":"游戏结束",500,y+119,portal?60:70,INK,true);
-        String detail=portal?"原局已保存 · 进入星隙，带回额外奖励":
+        String detail=portal?"原局已保存 · 五款随机奇遇，达标自动回来":
                 paused?"第 "+engine.level+" 关 · "+engine.score+" 分":
                 cleared?"第 "+engine.level+" 关已清空":
                 "本轮 "+engine.score+" 分 · 最佳 "+Math.max(bestChallenge,engine.score);
-        if(paused&&!portal&&toastLife>0&&toast.startsWith("星隙奖励"))detail=toast;
+        if(paused&&!portal&&toastLife>0&&toast.startsWith("奇遇奖励"))detail=toast;
         center(canvas,detail,500,y+188,32,MUTED,false);
         button(canvas,portal?"portal":paused?"resume":cleared?"next":"again",
-                portal?"进入星隙奖励关":paused?"继续游戏":cleared?"下一关":"再玩一次",
+                portal?"继续随机奇遇":paused?"继续游戏":cleared?"下一关":"再玩一次",
                 131,y+252,738,131,true);
         if(paused){
             button(canvas,portal?"cancelPortal":"restart",portal?"暂不探索，继续碰界":"重新开始",131,y+409,738,105,false);
@@ -1327,13 +1327,13 @@ final class GameView extends View {
                 }
                 break;
             case "portal":
-                ((MainActivity)getContext()).openStarPortal();
+                ((MainActivity)getContext()).openRandomPortal();
                 break;
             case "cancelPortal":
                 ((MainActivity)getContext()).cancelStarPortal();
                 break;
             case "resume":
-                if(engine.portalActive){((MainActivity)getContext()).openStarPortal();break;}
+                if(engine.portalActive){((MainActivity)getContext()).openRandomPortal();break;}
                 this.engine.resume();
                 refresh();
                 break;

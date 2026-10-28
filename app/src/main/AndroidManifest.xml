@@ -13,7 +13,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".MainActivity" android:exported="false"
-            android:screenOrientation="portrait" android:configChanges="screenSize|uiMode|orientation" />
+            android:screenOrientation="portrait" android:configChanges="screenSize|uiMode|orientation|screenLayout|smallestScreenSize" />
         <activity android:name="io.github.jeremyjia.stardrift.MainActivity" android:exported="false"
             android:screenOrientation="portrait" android:theme="@style/StarTheme" />
         <activity android:name="dev.brickzen.tabletennis.TableTennisActivity" android:exported="false"

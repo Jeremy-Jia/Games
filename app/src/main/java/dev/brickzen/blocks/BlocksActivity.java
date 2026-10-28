@@ -15,10 +15,13 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import dev.brickzen.arcade.EncounterPlan;
+import dev.brickzen.arcade.EncounterSession;
 
 /** Owns audio, feedback, records and Android lifecycle; the board stays Android independent. */
 public final class BlocksActivity extends Activity implements BlocksView.Host {
     public BlocksView game;
+    public EncounterSession encounter;
     private SharedPreferences preferences;
     private ToneGenerator sound;
     private Vibrator vibrator;
@@ -26,7 +29,7 @@ public final class BlocksActivity extends Activity implements BlocksView.Host {
     private long lastSound;
 
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state); preferences=getSharedPreferences("blocks",MODE_PRIVATE);
+        super.onCreate(state); preferences=getSharedPreferences("blocks",MODE_PRIVATE);encounter=EncounterSession.from(this,EncounterPlan.BLOCKS);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         if(Build.VERSION.SDK_INT>=29)getWindow().setNavigationBarContrastEnforced(false);
@@ -65,9 +68,10 @@ public final class BlocksActivity extends Activity implements BlocksView.Host {
     @Override public boolean hapticsEnabled(){return preferences.getBoolean("haptics",true);}
     @Override public void setSound(boolean enabled){preferences.edit().putBoolean("sound",enabled).apply();if(!enabled&&sound!=null)sound.stopTone();}
     @Override public void setHaptics(boolean enabled){preferences.edit().putBoolean("haptics",enabled).apply();}
-    @Override public void started(){preferences.edit().putInt("runs",preferences.getInt("runs",0)+1).apply();}
-    @Override public void record(int score,int lines){preferences.edit().putInt("best_score",Math.max(bestScore(),score)).putInt("best_lines",Math.max(bestLines(),lines)).apply();}
-    @Override public void quit(){finish();}
+    @Override public EncounterSession encounter(){return encounter;}
+    @Override public void started(){if(encounter==null)preferences.edit().putInt("runs",preferences.getInt("runs",0)+1).apply();}
+    @Override public void record(int score,int lines){if(encounter==null)preferences.edit().putInt("best_score",Math.max(bestScore(),score)).putInt("best_lines",Math.max(bestLines(),lines)).apply();}
+    @Override public void quit(){if(encounter!=null)encounter.cancel();else finish();}
     @Override public void feedback(String event){
         if(!foreground||!hasWindowFocus())return;
         boolean strong=event.equals("tetris")||event.equals("clear")||event.equals("over");

@@ -23,6 +23,7 @@ import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import org.json.JSONObject;
+import dev.brickzen.arcade.EncounterPlan;
 
 /** Original Brick Zen activity, now hosted inside the offline game collection. */
 public final class MainActivity extends Activity {
@@ -169,16 +170,31 @@ public final class MainActivity extends Activity {
 
     void clearPortalCheckpoint(){game.prefs.edit().remove(PORTAL_SNAPSHOT).remove("portal_message").commit();}
 
-    public void openStarPortal(){
+    EncounterPlan currentPortalPlan(){
+        GameEngine e=game.engine;
+        if(e.portalTarget<=0){
+            EncounterPlan p=EncounterPlan.forPortal(e.portalId);
+            e.portalGame=p.game;e.portalMetric=p.metric;e.portalTarget=p.target;e.portalDifficulty=p.difficulty;e.portalSeed=p.seed;
+        }
+        return new EncounterPlan(e.portalGame,e.portalMetric,e.portalTarget,e.portalDifficulty,e.portalSeed);
+    }
+
+    public void openRandomPortal(){
         if(portalLaunching||game==null||!game.engine.portalActive)return;
+        EncounterPlan plan=currentPortalPlan();
         game.engine.portalPending=false;game.engine.pause();game.paddlePointer=-1;game.pressed.clear();
         if(!checkpointPortal()){game.toast="保存暂未完成，请稍后再试";game.toastLife=5;game.invalidate();return;}
         portalLaunching=true;game.audio.stop();game.haptics.stop();
-        Intent intent=new Intent(this,io.github.jeremyjia.stardrift.MainActivity.class)
-                .putExtra("bonus_mode",true).putExtra("portal_id",game.engine.portalId);
+        Class<?>[] destinations={io.github.jeremyjia.stardrift.MainActivity.class,dev.brickzen.tabletennis.TableTennisActivity.class,
+                dev.brickzen.blocks.BlocksActivity.class,dev.brickzen.hillclimb.HillClimbActivity.class,dev.brickzen.range.RangeActivity.class};
+        Intent intent=new Intent(this,destinations[plan.game])
+                .putExtra("bonus_mode",true).putExtra("portal_id",game.engine.portalId)
+                .putExtra("encounter_game",plan.game).putExtra("encounter_metric",plan.metric).putExtra("encounter_target",plan.target)
+                .putExtra("encounter_difficulty",plan.difficulty).putExtra("encounter_seed",plan.seed);
         try{startActivityForResult(intent,STAR_PORTAL_REQUEST);}
-        catch(RuntimeException error){portalLaunching=false;game.toast="星隙暂时无法启动，可继续或返回碰界";game.toastLife=5;game.invalidate();}
+        catch(RuntimeException error){portalLaunching=false;game.toast="奇遇暂时无法启动，可返回碰界";game.toastLife=5;game.invalidate();}
     }
+    public void openStarPortal(){openRandomPortal();}
 
     void cancelStarPortal(){
         if(game.engine.portalActive)applyPortalResult(game.engine.portalId,0,false,true);
@@ -189,7 +205,7 @@ public final class MainActivity extends Activity {
         String before=game.engine.snapshot();if(before==null)return false;int previous=game.engine.score;
         game.engine.completePortal(Math.max(0,Math.min(3000,score)),survived,cancelled);
         game.scene=GameView.Scene.GAME;game.engine.portalPending=false;
-        String message=cancelled?"已返回碰界，继续冒险":"星隙奖励 +"+(game.engine.score-previous)+" 分 · 冒险继续";
+        String message=cancelled?"已返回碰界，继续冒险":"奇遇奖励 +"+(game.engine.score-previous)+" 分 · 冒险继续";
         String completed=game.engine.snapshot();
         if(completed==null||!game.prefs.edit().putString(PORTAL_SNAPSHOT,completed).putString("portal_message",message).commit()){
             game.engine=GameEngine.fromSnapshot(before);game.toast="奖励正在等待保存，请重新进入本局";game.toastLife=5;game.invalidate();return false;
@@ -203,7 +219,11 @@ public final class MainActivity extends Activity {
     private void consumeSavedPortalResult(){
         if(game==null||!game.engine.portalActive||game.engine.portalId==null)return;
         String json=getSharedPreferences("portal_results",MODE_PRIVATE).getString(game.engine.portalId,null);if(json==null)return;
-        try{JSONObject result=new JSONObject(json);applyPortalResult(result.optString("portal_id"),result.optInt("bonus_score"),result.optBoolean("survived"),result.optBoolean("cancelled"));}
+        try{JSONObject result=new JSONObject(json);
+            if(game.engine.portalTarget>0 && (result.optInt("encounter_game",-1)!=game.engine.portalGame
+                    ||result.optLong("encounter_target",0)!=game.engine.portalTarget||result.optInt("encounter_metric",-1)!=game.engine.portalMetric
+                    ||result.optInt("encounter_difficulty",0)!=game.engine.portalDifficulty))return;
+            applyPortalResult(result.optString("portal_id"),result.optInt("bonus_score"),result.optBoolean("survived"),result.optBoolean("cancelled"));}
         catch(Exception ignored){game.toast="奖励记录暂无法读取，原局仍已保存";game.toastLife=5;}
     }
 
@@ -212,6 +232,10 @@ public final class MainActivity extends Activity {
         portalLaunching=false;consumeSavedPortalResult();
         if(game==null||!game.engine.portalActive)return;
         if(data!=null){
+            if(game.engine.portalTarget>0 && (data.getIntExtra("encounter_game",-1)!=game.engine.portalGame
+                    ||data.getLongExtra("encounter_target",0)!=game.engine.portalTarget
+                    ||data.getIntExtra("encounter_metric",-1)!=game.engine.portalMetric
+                    ||data.getIntExtra("encounter_difficulty",0)!=game.engine.portalDifficulty))return;
             applyPortalResult(data.getStringExtra("portal_id"),data.getIntExtra("bonus_score",0),
                     data.getBooleanExtra("survived",false),resultCode!=RESULT_OK||data.getBooleanExtra("cancelled",false));
         }else if(resultCode!=RESULT_OK)cancelStarPortal();
@@ -220,7 +244,7 @@ public final class MainActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle state){checkpointPortal();super.onSaveInstanceState(state);}
     private void continuePendingPortal(){
         if(game==null||!hasWindowFocus()||portalLaunching||!game.engine.portalActive)return;
-        game.post(()->{if(hasWindowFocus()&&!portalLaunching&&game.engine.portalActive)openStarPortal();});
+        game.post(()->{if(hasWindowFocus()&&!portalLaunching&&game.engine.portalActive)openRandomPortal();});
     }
 
     @Override protected void onResume(){super.onResume();portalLaunching=false;consumeSavedPortalResult();if(game!=null)game.wake();continuePendingPortal();}

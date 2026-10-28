@@ -7,7 +7,25 @@ public final class GameEngineTest {
     public static void main(String[] args) throws Exception {
         movementAndPause(); upgradeChoice(); entityBounds(); terminalStates(); deterministicRun(); bossAtEntityCap();
         waveObjectives(); noTimeLimit(); challengePauseAndDeath(); challengeBoundsAndReset(); challengeAutoUpgrade();
+        continuousEncounter();
         System.out.println("PASS: movement, upgrades, bounded entities, deterministic replay, objective waves, final boss, unlimited clock, auto-upgrade steering, terminal states");
+    }
+    private static void continuousEncounter() {
+        GameEngine g=new GameEngine(null);g.startEncounter(48,12);g.hp=g.maxHp=100000;g.invulnerable=100000;
+        for(int frame=0;frame<60*240&&g.encounterKills<300;frame++){
+            shootVisibleEnemies(g);g.update(1f/60);
+            check(g.phase==GameEngine.Phase.PLAYING&&!g.bossSpawned,"random objective mode never ends at a fixed boss or wave");
+        }
+        check(g.encounterKills>=300&&g.getWave()>5&&g.encounterScore>0,"encounters progress beyond both old finite enemy budgets");
+        g.encounterKills=2147483655L;g.encounterScore=2147483655L;
+        GameEngine.Enemy e=new GameEngine.Enemy();e.hp=e.maxHp=1;e.x=g.shipX;e.y=g.shipY-30;e.age=1;e.id=99999;g.enemies.add(e);
+        shootVisibleEnemies(g);g.update(.016f);
+        check(g.encounterKills>2147483655L&&g.encounterScore>2147483655L,"encounter counters keep integer precision beyond int/float counters");
+        GameEngine easy=new GameEngine(null),hard=new GameEngine(null);easy.startEncounter(1,1);hard.startEncounter(1,100);
+        for(int i=0;i<5;i++){easy.update(.05f);hard.update(.05f);}
+        check(!easy.enemies.isEmpty()&&!hard.enemies.isEmpty()&&hard.enemies.get(0).maxHp>easy.enemies.get(0).maxHp,"random difficulty scales beyond fixed presets");
+        g.startChallenge(2);check(!g.encounterMode&&g.getWaveCount()==5&&g.encounterKills==0,"legacy challenge reset remains finite");
+        g.start(2);check(!g.encounterMode&&g.getWaveCount()==7,"normal run reset remains finite");
     }
     private static void movementAndPause() {
         GameEngine g = new GameEngine(null); g.start(77); g.setTarget(-200, 9000);

@@ -67,6 +67,8 @@ final class GameEngine implements Serializable {
     boolean portalPending;
     boolean portalActive;
     String portalId = "";
+    int portalGame = -1, portalMetric, portalDifficulty;
+    long portalTarget, portalSeed;
     private boolean portalTriggered;
 
     enum Kind {
@@ -389,6 +391,8 @@ final class GameEngine implements Serializable {
         this.portalActive = false;
         this.portalTriggered = false;
         this.portalId = "";
+        this.portalGame = -1; this.portalMetric = this.portalDifficulty = 0;
+        this.portalTarget = this.portalSeed = 0;
         this.level = Math.max(1, i);
         this.zen = z;
         this.score = i2;
@@ -1178,6 +1182,8 @@ final class GameEngine implements Serializable {
     }
 
     private static boolean validSnapshot(GameEngine engine) {
+        if(engine.portalTarget<0 || engine.portalTarget>0 && (engine.portalGame<0 || engine.portalGame>4
+                || engine.portalMetric<0 || engine.portalMetric>1 || engine.portalDifficulty<1))return false;
         if (engine.state == null || engine.beforePause == null || engine.random == null || engine.contact == null
                 || engine.portalId == null || engine.portalId.length() > 128
                 || engine.balls == null || engine.balls.size() > 16

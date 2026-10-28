@@ -22,6 +22,9 @@ public final class GameEngine {
     public float shipX, shipY, shipRadius = 9, invulnerable, shield;
     public boolean bossSpawned, bossDefeated;
     public boolean challengeMode;
+    public boolean encounterMode;
+    public int encounterDifficulty = 1;
+    public long encounterKills, encounterScore;
     @Deprecated public float runDuration = Float.POSITIVE_INFINITY;
     public float waveStartedAt;
     public long runSeed;
@@ -81,7 +84,8 @@ public final class GameEngine {
 
     public void start(long seed) {
         runSeed = seed; random = new Random(seed);
-        challengeMode = false; runDuration = Float.POSITIVE_INFINITY;
+        challengeMode = encounterMode = false; runDuration = Float.POSITIVE_INFINITY;
+        encounterDifficulty = 1; encounterKills = encounterScore = 0;
         phase = Phase.PLAYING; time = 0; hp = maxHp = 100; shield = 0;
         level = 1; xp = 0; xpNext = 6; pulseCharge = 1;
         kills = score = 0; combo = 0; comboTimer = 0;
@@ -105,6 +109,14 @@ public final class GameEngine {
         pulseCooldown = 9;
     }
 
+    /** Continuous waves: only the host's random objective or player defeat ends an encounter. */
+    public void startEncounter(long seed, int difficulty) {
+        startChallenge(seed); encounterMode = true; encounterDifficulty = Math.max(1, difficulty);
+    }
+
+    public long encounterProgress(int metric) { return metric == 0 ? encounterKills : encounterScore; }
+    private float encounterScale() { return encounterMode ? 1 + (float)Math.log(encounterDifficulty) * .16f : 1; }
+
     /** Compatibility overload. The old duration parameter is deliberately ignored. */
     @Deprecated public void startChallenge(long seed, float ignoredSeconds) { startChallenge(seed); }
 
@@ -116,10 +128,10 @@ public final class GameEngine {
     public int getUpgradeCount() { return level - 1; }
     private int[] waveTargets() { return challengeMode ? CHALLENGE_WAVES : STANDARD_WAVES; }
     public int getWave() { return waveIndex + 1; }
-    public int getWaveCount() { return waveTargets().length + 1; }
-    public boolean isBossWave() { return waveIndex >= waveTargets().length; }
+    public int getWaveCount() { return encounterMode ? Integer.MAX_VALUE : waveTargets().length + 1; }
+    public boolean isBossWave() { return !encounterMode && waveIndex >= waveTargets().length; }
     public int getWaveKills() { return isBossWave() ? (bossDefeated ? 1 : 0) : waveKills; }
-    public int getWaveTarget() { return isBossWave() ? 1 : waveTargets()[waveIndex]; }
+    public int getWaveTarget() { return encounterMode ? (int)Math.min(Integer.MAX_VALUE, 12L + waveIndex * 6L) : isBossWave() ? 1 : waveTargets()[waveIndex]; }
     public float getWaveProgress() {
         if (!isBossWave()) return clamp((float)waveKills / getWaveTarget(), 0, 1);
         if (bossDefeated) return 1;
@@ -156,7 +168,7 @@ public final class GameEngine {
                     && waveSpawned < getWaveTarget() && enemies.size() < MAX_ENEMIES) {
                 spawnEnemy(-1); waveSpawned++;
             }
-            spawnTimer = Math.max(.3f, (challengeMode ? .7f : .78f) - waveIndex * .1f);
+            spawnTimer = Math.max(.12f, Math.max(.3f, (challengeMode ? .7f : .78f) - waveIndex * .1f) / encounterScale());
         }
         if (isBossWave() && !bossSpawned) { spawnEnemy(3); bossSpawned = true; event("boss"); }
         updateEnemies(dt);
@@ -176,7 +188,8 @@ public final class GameEngine {
 
     private void advanceWave() {
         if (!isBossWave() && waveKills >= getWaveTarget()) {
-            waveIndex++; waveKills = waveSpawned = 0; waveStartedAt = time;
+            if (waveIndex < Integer.MAX_VALUE - 1) waveIndex++;
+            waveKills = waveSpawned = 0; waveStartedAt = time;
             spawnTimer = .45f;
             // A short repair keeps later waves tense without turning every graze into a restart.
             hp = Math.min(maxHp, hp + 8);
@@ -197,7 +210,8 @@ public final class GameEngine {
         }
         e.r = e.type == 3 ? 31 : e.type == 2 ? 17 : e.type == 1 ? 11 : 10;
         e.maxHp = e.type == 3 ? (challengeMode ? 2400 : 4800)
-                : e.type == 2 ? 66 + waveIndex * 11 : e.type == 1 ? 25 + waveIndex * 4 : 14 + waveIndex * 2;
+                : e.type == 2 ? 66 + waveIndex * 11f : e.type == 1 ? 25 + waveIndex * 4f : 14 + waveIndex * 2f;
+        e.maxHp *= encounterScale();
         e.hp = e.maxHp; e.attackTimer = 1.2f + random.nextFloat() * 1.5f;
         e.wobble = random.nextFloat() * 6.28f; e.chargeTimer = 1.4f;
         if (e.type == 3) { e.x = width / 2; e.y = 210; }
@@ -234,18 +248,18 @@ public final class GameEngine {
             } else if (e.type == 1) {
                 e.chargeTimer -= dt;
                 if (e.chargeTimer < 0) {
-                    float dashSpeed = 225 + Math.min(60, waveIndex * 13);
+                    float dashSpeed = 225 + Math.min(60, waveIndex * 13f);
                     e.vx = dx / distance * dashSpeed; e.vy = dy / distance * dashSpeed; e.chargeTimer = 2.4f;
                 }
                 if (e.chargeTimer > 1.85f) { e.x += e.vx * dt; e.y += e.vy * dt; }
                 else { e.x += dx / distance * dt * 24; e.y += dy / distance * dt * 24; }
             } else {
-                speed = e.type == 2 ? 30 + waveIndex * 2 : 58 + Math.min(32, waveIndex * 7);
+                speed = (e.type == 2 ? 30 + waveIndex * 2f : 58 + Math.min(32, waveIndex * 7f)) * encounterScale();
                 e.x += dx / distance * speed * dt; e.y += dy / distance * speed * dt;
                 if (e.type == 2) {
                     e.attackTimer -= dt;
                     if (e.attackTimer <= 0) {
-                        enemyShot(e, e.angle, 147 + waveIndex * 4, 12);
+                        enemyShot(e, e.angle, 147 + waveIndex * 4f, 12);
                         if(getWave()>=4){enemyShot(e,e.angle-.24f,128,10);enemyShot(e,e.angle+.24f,128,10);}
                         e.attackTimer = 1.9f;
                     }
@@ -318,8 +332,10 @@ public final class GameEngine {
     private void damageEnemy(int index, float amount) {
         Enemy e = enemies.get(index); e.hp -= amount; e.hit = 0.12f;
         if (e.hp > 0) return;
-        enemies.remove(index); kills++; combo++; comboTimer = 3;
-        score += (e.type == 3 ? 1500 : e.type == 2 ? 80 : 30) + Math.min(combo, 10) * 2;
+        enemies.remove(index); kills++; if(encounterKills < Long.MAX_VALUE)encounterKills++;
+        if(combo<Integer.MAX_VALUE)combo++; comboTimer = 3;
+        int award=(e.type == 3 ? 1500 : e.type == 2 ? 80 : 30) + Math.min(combo, 10) * 2;
+        score += award; encounterScore=saturatedAdd(encounterScore,award);
         pulseCharge = Math.min(1, pulseCharge + 0.015f);
         int count = e.type == 3 ? 18 : e.type == 2 ? 4 : 1;
         for (int i = 0; i < count && gems.size() < MAX_GEMS; i++) {
@@ -329,7 +345,7 @@ public final class GameEngine {
         }
         if (e.type == 3) {
             bossDefeated = true; hp = Math.min(maxHp, hp + 30); event("boss_down");
-            if (phase == Phase.PLAYING) {
+            if (phase == Phase.PLAYING && !encounterMode) {
                 phase = Phase.WON; score += 2000 + hp * 10; event("win");
             }
         } else waveKills++;
@@ -356,11 +372,13 @@ public final class GameEngine {
                 if (dist > 0.1f) { g.x += dx / dist * speed * dt; g.y += dy / dist * speed * dt; }
             } else { g.x += g.vx * dt; g.y += g.vy * dt; g.vx *= 1 - dt * 3; g.vy *= 1 - dt * 3; }
             if (dist < shipRadius + 8) {
-                xp += g.value; score += g.value * 4; gems.remove(i);
+                xp += g.value; score += g.value * 4; encounterScore=saturatedAdd(encounterScore,(long)(g.value*4)); gems.remove(i);
                 if (xp >= xpNext && phase == Phase.PLAYING) { prepareUpgrade(); return; }
             } else if (g.age > 32) gems.remove(i);
         }
     }
+
+    private static long saturatedAdd(long value,long increment) { return value > Long.MAX_VALUE-increment ? Long.MAX_VALUE : value+increment; }
 
     private void prepareUpgrade() {
         xp -= xpNext; level++; xpNext = 6 + (level - 1) * 3;

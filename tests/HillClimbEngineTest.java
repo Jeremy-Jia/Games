@@ -1,7 +1,7 @@
 import dev.brickzen.hillclimb.HillClimbEngine;
 
 public final class HillClimbEngineTest {
-    public static void main(String[] args){terrain();driveAndBrake();fuelAndPickups();pauseCrashReset();determinism();
+    public static void main(String[] args){terrain();driveAndBrake();fuelAndPickups();pauseCrashReset();determinism();encounterDifficultyAndCounters();
         System.out.println("PASS: hill driving continuous terrain, two-wheel suspension/traction, throttle/brake, pickups/fuel, crash/pause/reset, stable bounded deterministic steps");}
     private static void terrain(){for(int seed=0;seed<20;seed++){HillClimbEngine e=new HillClimbEngine();e.start(seed);
         for(float x=0;x<2000;x+=.13f){float height=e.terrainHeight(x);check(Float.isFinite(height)&&Math.abs(height-e.terrainHeight(x+.01f))<.04f,"terrain remains continuous");}
@@ -29,6 +29,17 @@ public final class HillClimbEngineTest {
     private static void determinism(){HillClimbEngine a=new HillClimbEngine(),b=new HillClimbEngine();a.start(99);b.start(99);
         for(int i=0;i<60*90;i++){float gas=i%180<140?1:0,brake=i%180>=140?1:0;a.setControls(gas,brake);b.setControls(gas,brake);a.update(1f/60);b.update(1f/60);
             check(a.x==b.x&&a.y==b.y&&a.angle==b.angle&&Float.isFinite(a.y)&&a.pickups.size()<=40,"replay finite, deterministic, bounded");}
+    }
+    private static void encounterDifficultyAndCounters(){
+        HillClimbEngine normal=new HillClimbEngine(),hard=new HillClimbEngine();normal.start(9);hard.startEncounter(9,50);
+        check(hard.difficulty==50&&Math.abs(hard.terrainHeight(150))>Math.abs(normal.terrainHeight(150)),"encounter terrain difficulty scales beyond fixed presets");
+        for(int frame=0;frame<120;frame++){normal.update(1f/60);hard.update(1f/60);}
+        check(hard.fuel<normal.fuel&&Float.isFinite(hard.y),"encounter tier affects fuel and remains physically stable");
+        hard.startEncounter(7,Integer.MAX_VALUE);hard.update(.05f);
+        check(Float.isFinite(hard.terrainHeight(700))&&Float.isFinite(hard.y)&&hard.phase==HillClimbEngine.Phase.PLAYING,"large numeric tier does not overflow terrain");
+        hard.totalCoins=3_000_000_000L;hard.coins=Integer.MAX_VALUE;HillClimbEngine.Pickup coin=hard.pickups.get(0);hard.x=coin.x;hard.y=coin.y;hard.update(.001f);
+        check(hard.objectiveProgress(1)==3_000_000_001L&&hard.coins==Integer.MAX_VALUE,"coin objective count can exceed int display range");
+        hard.start(9);check(hard.difficulty==1&&hard.totalCoins==0&&hard.terrainHeight(150)==normal.terrainHeight(150),"ordinary restart restores original terrain and counters");
     }
     private static void check(boolean value,String description){if(!value)throw new AssertionError(description);}
 }

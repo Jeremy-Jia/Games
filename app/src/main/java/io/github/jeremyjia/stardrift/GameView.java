@@ -17,6 +17,7 @@ import android.view.WindowInsets;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Random;
+import dev.brickzen.arcade.EncounterSession;
 
 /** Code-drawn arcade presentation: no network, bitmap assets, or game runtime. */
 public final class GameView extends View {
@@ -28,6 +29,7 @@ public final class GameView extends View {
         void event(String name); void exitGame();
         boolean reduceMotion(); void setReduceMotion(boolean value);
         boolean isBonusRun(); void finishBonus(int score, boolean survived, boolean cancelled);
+        default EncounterSession encounterSession(){return null;}
     }
     private static final int BG = Color.rgb(7, 17, 26), PANEL = Color.rgb(15, 31, 41);
     private static final int WHITE = Color.rgb(239, 246, 244), MUTED = Color.rgb(137, 161, 171);
@@ -39,6 +41,7 @@ public final class GameView extends View {
     private static final Typeface MONO = Typeface.create("monospace", Typeface.NORMAL);
     private final Host host;
     private final GameEngine game;
+    private final EncounterSession encounter;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
     private final RectF rect = new RectF();
@@ -68,7 +71,9 @@ public final class GameView extends View {
         super(context);
         this.host = host;
         this.game = new GameEngine(this::gameEvent);
-        if (host.isBonusRun()) {
+        this.encounter=host.encounterSession();
+        if(encounter!=null)startEncounter();
+        else if (host.isBonusRun()) {
             screen="play";game.startChallenge(System.nanoTime());
             toast="四波突围，击败最终 Boss · 不限时";toastTime=5;
         }
@@ -90,6 +95,13 @@ public final class GameView extends View {
         });
     }
 
+    public void startEncounter(){
+        if(encounter==null)return;
+        game.startEncounter(encounter.plan.seed,encounter.plan.difficulty);
+        screen="play";modal="";paused=false;recorded=false;lastFrame=0;
+        toast="随机目标已开启 · 达标自动返回碰界";toastTime=4;invalidate();
+    }
+
     @Override protected void onSizeChanged(int width,int height,int oldw,int oldh) {
         scale=width/400f; w=400; h=height/scale;
         game.setBounds(w,h);
@@ -109,13 +121,14 @@ public final class GameView extends View {
         ambient+=dt; fxFlash=Math.max(0,fxFlash-dt*2.8f);
         pulseWave=Math.max(0,pulseWave-dt); toastTime=Math.max(0,toastTime-dt);
         shake=Math.max(0,shake-dt*22);
-        if (screen.equals("play") && !paused && modal.isEmpty() && !suspended) {
+        if (screen.equals("play") && !paused && modal.isEmpty() && !suspended && (encounter==null||!encounter.isEnding())) {
             game.update(dt);
-            if ((game.phase==GameEngine.Phase.WON || game.phase==GameEngine.Phase.LOST) && !recorded) {
+            if(encounter!=null)encounter.observe(game.encounterProgress(encounter.plan.metric),game.phase==GameEngine.Phase.LOST);
+            if (encounter==null && (game.phase==GameEngine.Phase.WON || game.phase==GameEngine.Phase.LOST) && !recorded) {
                 host.recordRun(Math.round(game.score),Math.round(game.kills),game.time,game.phase==GameEngine.Phase.WON);
                 recorded=true;
             }
-            if(host.isBonusRun() && (game.phase==GameEngine.Phase.WON || game.phase==GameEngine.Phase.LOST)) {
+            if(encounter==null && host.isBonusRun() && (game.phase==GameEngine.Phase.WON || game.phase==GameEngine.Phase.LOST)) {
                 bonusFinishElapsed+=dt;
                 if(bonusFinishElapsed>=.65f && !bonusReturnQueued) {
                     bonusReturnQueued=true;
@@ -135,13 +148,14 @@ public final class GameView extends View {
             if (shake>0 && !host.reduceMotion()) canvas.translate((visualRandom.nextFloat()-.5f)*shake,(visualRandom.nextFloat()-.5f)*shake);
             arena(canvas); canvas.restore(); hud(canvas);
             if (game.phase==GameEngine.Phase.UPGRADE && !paused) upgrade(canvas);
-            else if (game.phase==GameEngine.Phase.LOST || game.phase==GameEngine.Phase.WON) {
+            else if (encounter==null && (game.phase==GameEngine.Phase.LOST || game.phase==GameEngine.Phase.WON)) {
                 if(host.isBonusRun())bonusDeparture(canvas);else result(canvas);
             }
             else if (paused && modal.isEmpty()) pauseMenu(canvas);
         }
         if (modal.equals("settings")) settings(canvas);
         else if (modal.equals("guide")) guide(canvas);
+        if(encounter!=null&&screen.equals("play")&&modal.isEmpty()&&!paused){encounter.draw(canvas,24,top+145,352);if(encounter.isEnding())buttons.clear();}
         if (toastTime>0 && modal.isEmpty() && !paused && game.phase==GameEngine.Phase.PLAYING && screen.equals("play")) {
             float tw=Math.min(344,measure(toast,12,MEDIUM)+36);
             round(canvas,(w-tw)/2,h-bottom-155,tw,32,16,0xe31b353e);
@@ -216,7 +230,7 @@ public final class GameView extends View {
         // Edge guide remains understated, leaving the playfield uncluttered.
         line(c,22,top+100,378,top+100,.5f,0x193e6871);
         float waveAge=game.time-game.waveStartedAt;
-        if(waveAge<2.2f) {
+        if(waveAge<2.2f && encounter==null) {
             float a=Math.min(1,(2.2f-waveAge)*1.5f);
             String label=game.isBossWave()?"最终对决 · 守望者":("WAVE 0"+game.getWave()+" · "+waveName());
             text(c,label,200,top+181,16,alpha(game.isBossWave()?RED:MINT,(int)(a*220)),MEDIUM,Paint.Align.CENTER);
@@ -352,10 +366,10 @@ public final class GameView extends View {
         if(game.time<13 && game.phase==GameEngine.Phase.PLAYING) {
             text(c,"拖动任意位置驾驶 · 松手悬停",200,bY-25,10,MUTED,REG,Paint.Align.CENTER);
         } else {
-            text(c,game.isBossWave()?"击败最终守望者"+(game.challengeMode?" · 自动带奖励返回":" · 完成航程")
+            text(c,encounter!=null?"随机目标 · 达标自动返回 · 自动装配升级":game.isBossWave()?"击败最终守望者"+(game.challengeMode?" · 自动带奖励返回":" · 完成航程")
                     :"第 "+game.getWave()+" / "+(game.getWaveCount()-1)+" 波"+(game.challengeMode?" · 自动装配升级":" · 收集星尘强化")+" · 不限时",200,bY-22,9,MUTED,REG,Paint.Align.CENTER);
         }
-        float progress=Math.min(1,(game.getWave()-1+game.getWaveProgress())/game.getWaveCount());
+        float progress=encounter!=null?(float)Math.min(1,(double)game.encounterProgress(encounter.plan.metric)/encounter.plan.target):Math.min(1,(game.getWave()-1+game.getWaveProgress())/game.getWaveCount());
         round(c,22,h-bottom-1,356,2,1,0xff19313b);round(c,22,h-bottom-1,356*progress,2,1,0xff49786f);
     }
 
@@ -516,6 +530,7 @@ public final class GameView extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
+        if(encounter!=null&&encounter.isEnding())return true;
         float x=e.getX()/scale,y=e.getY()/scale;
         switch(e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
@@ -555,6 +570,8 @@ public final class GameView extends View {
     public void onHostPause(){if(!suspended&&screen.equals("play")&&game.phase==GameEngine.Phase.PLAYING)paused=true;suspended=true;touchDriving=false;game.releaseTarget();lastFrame=0;}
     public void onHostResume(){suspended=false;lastFrame=0;invalidate();}
     public boolean handleBack(){
+        if(encounter!=null&&encounter.isEnding())return true;
+        if(encounter!=null&&paused&&modal.isEmpty()){encounter.cancel();return true;}
         if(!modal.isEmpty()){modal="";invalidate();return true;}
         if(screen.equals("play")) {
             if(game.phase==GameEngine.Phase.WON||game.phase==GameEngine.Phase.LOST){if(host.isBonusRun()){host.finishBonus(bonusReward(),game.phase==GameEngine.Phase.WON,false);return true;}screen="home";paused=false;}

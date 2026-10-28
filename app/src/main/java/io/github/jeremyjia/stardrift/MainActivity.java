@@ -16,6 +16,8 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import org.json.JSONObject;
+import dev.brickzen.arcade.EncounterPlan;
+import dev.brickzen.arcade.EncounterSession;
 
 /** Android host: the game and every visible screen live in GameView. */
 public final class MainActivity extends Activity implements GameView.Host {
@@ -27,11 +29,13 @@ public final class MainActivity extends Activity implements GameView.Host {
     private boolean bonusMode;
     private boolean bonusReturned;
     private String portalId;
+    public EncounterSession encounter;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         preferences = getSharedPreferences("star_drift", MODE_PRIVATE);
-        bonusMode = getIntent().getBooleanExtra("bonus_mode", false);
+        encounter=EncounterSession.from(this,EncounterPlan.STAR);
+        bonusMode = encounter!=null || getIntent().getBooleanExtra("bonus_mode", false);
         portalId = getIntent().getStringExtra("portal_id");
         if (portalId == null) portalId = "";
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
@@ -158,6 +162,7 @@ public final class MainActivity extends Activity implements GameView.Host {
     }
 
     @Override public void recordRun(int score, int kills, float seconds, boolean won) {
+        if(encounter!=null)return;
         if (bonusMode) {
             preferences.edit().putInt("bonus_runs", preferences.getInt("bonus_runs", 0) + 1).apply();
             return;
@@ -197,13 +202,16 @@ public final class MainActivity extends Activity implements GameView.Host {
     }
 
     @Override public void exitGame() {
+        if(encounter!=null){encounter.cancel();return;}
         if (bonusMode) { finishBonus(0, false, true); return; }
         finish();
     }
 
     @Override public boolean isBonusRun() { return bonusMode; }
+    @Override public EncounterSession encounterSession(){return encounter;}
 
     @Override public void finishBonus(int score, boolean survived, boolean cancelled) {
+        if(encounter!=null){if(cancelled)encounter.cancel();return;}
         if (!bonusMode || bonusReturned) return;
         int reward = cancelled ? 0 : Math.max(0, Math.min(3000, score));
         try {

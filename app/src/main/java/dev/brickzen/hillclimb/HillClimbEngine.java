@@ -12,6 +12,8 @@ public final class HillClimbEngine {
     public Phase phase=Phase.READY;
     public float x,y,vx,vy,angle,angularVelocity,fuel,distance,time,airTime,landingFlash;
     public int coins,groundedWheels;
+    public int difficulty=1;
+    public long totalCoins;
     public String reason="";
     public static final class Pickup {
         public final float x,y;
@@ -20,24 +22,31 @@ public final class HillClimbEngine {
         Pickup(float x,float y,boolean fuel){this.x=x;this.y=y;this.fuel=fuel;}
     }
     private final Listener listener;
-    private float throttle,brake,phaseA,phaseB,crashTimer,stalledTimer;
+    private float throttle,brake,phaseA,phaseB,crashTimer,stalledTimer,challengeScale=1;
     private int nextPickup;
 
     public HillClimbEngine(){this(null);}
     public HillClimbEngine(Listener listener){this.listener=listener;start(1);phase=Phase.READY;}
     public void start(long seed){
+        difficulty=1;challengeScale=1;
         Random random=new Random(seed);phaseA=random.nextFloat()*6.283185f;phaseB=random.nextFloat()*6.283185f;
         x=5;y=terrainHeight(x)+.70f;vx=vy=angle=angularVelocity=0;fuel=100;distance=time=airTime=landingFlash=0;
-        coins=groundedWheels=nextPickup=0;throttle=brake=crashTimer=stalledTimer=0;reason="";pickups.clear();
+        coins=groundedWheels=nextPickup=0;totalCoins=0;throttle=brake=crashTimer=stalledTimer=0;reason="";pickups.clear();
         phase=Phase.PLAYING;fillPickups();
     }
+    /** Smooth tier scaling without a fixed easy/normal/hard ceiling. Targets stay host-owned. */
+    public void startEncounter(long seed,int tier){
+        start(seed);difficulty=Math.max(1,tier);challengeScale=1+.16f*(float)Math.log(difficulty);
+        y=terrainHeight(x)+.70f;pickups.clear();nextPickup=0;fillPickups();
+    }
+    public long objectiveProgress(int metric){return metric==0?(long)distance:Math.max(totalCoins,(long)coins);}
     public void setControls(float gas,float stopping){throttle=finiteClamp(gas,0,1);brake=finiteClamp(stopping,0,1);}
     public void pause(){if(phase==Phase.PLAYING){phase=Phase.PAUSED;setControls(0,0);}}
     public void resume(){if(phase==Phase.PAUSED)phase=Phase.PLAYING;}
     public float terrainHeight(float position){
         float u=Math.max(0,position-8),ramp=Math.min(1,u/32);ramp=ramp*ramp*(3-2*ramp);
         float growth=Math.min(1,Math.max(0,(position-90)/350));
-        return ramp*((1.2f+growth*1.3f)*(float)Math.sin(u*.075f)
+        return challengeScale*ramp*((1.2f+growth*1.3f)*(float)Math.sin(u*.075f)
                 +(.45f+growth*.65f)*(float)Math.sin(u*.19f+phaseA)
                 +(.12f+growth*.2f)*(float)Math.sin(u*.41f+phaseB));
     }
@@ -80,7 +89,7 @@ public final class HillClimbEngine {
         angularVelocity=clamp(angularVelocity+torque/1.2f*dt,-5,5);
         x=Math.max(1,x+vx*dt);y+=vy*dt;angle=wrap(angle+angularVelocity*dt);
         distance=Math.max(distance,Math.max(0,x-5));
-        fuel=Math.max(0,fuel-dt*(.22f+drive*.85f));
+        fuel=Math.max(0,fuel-dt*(.22f+drive*.85f)*(1+(challengeScale-1)*.3f));
         float headX=x+.15f*(float)Math.cos(angle)-.61f*(float)Math.sin(angle);
         float headY=y+.15f*(float)Math.sin(angle)+.61f*(float)Math.cos(angle);
         boolean roof= Math.abs(angle)>1.8f && headY<terrainHeight(headX)+.13f;
@@ -89,7 +98,7 @@ public final class HillClimbEngine {
         stalledTimer=fuel<=0&&Math.abs(vx)<.7f?stalledTimer+dt:0;
         if(stalledTimer>3){finish("燃油耗尽 · 留意沿途补给");return;}
         for(Pickup pickup:pickups)if(!pickup.taken&&Math.abs(pickup.x-x)<1.3f&&Math.abs(pickup.y-y)<1.6f){
-            pickup.taken=true;if(pickup.fuel){fuel=Math.min(100,fuel+45);event("fuel");}else{coins++;event("coin");}
+            pickup.taken=true;if(pickup.fuel){fuel=Math.min(100,fuel+45);event("fuel");}else{totalCoins=Math.max(totalCoins,(long)coins);if(totalCoins<Long.MAX_VALUE)totalCoins++;coins=(int)Math.min(Integer.MAX_VALUE,totalCoins);event("coin");}
         }
         while(!pickups.isEmpty()&&pickups.get(0).x<x-24)pickups.remove(0);
         fillPickups();

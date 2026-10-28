@@ -16,26 +16,29 @@ import android.view.MotionEvent;
 import android.view.View;
 import java.util.ArrayList;
 import java.util.Locale;
+import dev.brickzen.arcade.EncounterSession;
 
 /** Landscape, resolution-independent hill course with parallax scenery and two-finger pedals. */
 public final class HillClimbView extends View {
     public interface Host{
         int bestDistance();int bestCoins();boolean soundEnabled();boolean hapticsEnabled();
         void setSound(boolean enabled);void setHaptics(boolean enabled);void started();void record(int distance,int coins);void feedback(String event);void quit();
+        default EncounterSession encounter(){return null;}
     }
     public final HillClimbEngine engine;
     public String screen="menu";
     private final Host host;
+    private final EncounterSession encounter;
     private static final int INK=0xffeff5e9,MINT=0xffb7e0c0,GOLD=0xfff2d1a0,MUTED=0xffa6bcb1;
     private static final Typeface NORMAL=Typeface.create("sans-serif",0),MEDIUM=Typeface.create("sans-serif-medium",0),MONO=Typeface.create("monospace",0);
     private final Paint paint=new Paint(3);private final Path path=new Path();private final RectF rect=new RectF();
     private final ArrayList<Button> buttons=new ArrayList<>();private final SparseArray<String> fingers=new SparseArray<>();
     private float scale=1,h=440,left=28,right=872,top=20,bottom=16,ambient,cameraX,baseY;
-    private long lastFrame;private boolean suspended=true,recorded;private String pressed="";
+    private long lastFrame;private boolean suspended=true,recorded,encounterStarted;private String pressed="";
     private static final float WORLD_SCALE=35;
     private static final class Button{final String action;final RectF bounds;Button(String action,float x,float y,float w,float h){this.action=action;bounds=new RectF(x,y,x+w,y+h);}}
     public HillClimbView(Context context,Host host){
-        super(context);this.host=host;engine=new HillClimbEngine(host::feedback);setFocusable(true);setClickable(true);
+        super(context);this.host=host;encounter=host.encounter();engine=new HillClimbEngine(host::feedback);setFocusable(true);setClickable(true);
         setContentDescription("野径，登山赛车。按住右侧油门前进，左侧刹车减速。腾空时油门抬头、刹车压头。顶部暂停。");
         setOnApplyWindowInsetsListener((v,insets)->{if(Build.VERSION.SDK_INT>=28&&insets.getDisplayCutout()!=null){
             left=Math.max(28,insets.getDisplayCutout().getSafeInsetLeft()/Math.max(.01f,scale)+10);
@@ -45,8 +48,10 @@ public final class HillClimbView extends View {
     }
     public float getLogicalWidth(){return 900;}
     public RectF getActionBounds(String action){for(Button b:buttons)if(b.action.equals(action))return new RectF(b.bounds);return null;}
-    public void startRun(long seed){engine.start(seed);host.started();recorded=false;screen="play";clearTouches();lastFrame=0;invalidate();}
+    public void startRun(long seed){if(encounter!=null){encounterStarted=true;engine.startEncounter(encounter.plan.seed,encounter.plan.difficulty);}else engine.start(seed);host.started();recorded=false;screen="play";clearTouches();lastFrame=0;invalidate();}
     public boolean performAction(String action){
+        if(encounter!=null&&encounter.isEnding())return false;
+        if(encounter!=null&&(action.equals("menu")||action.equals("home"))){clearTouches();encounter.cancel();return true;}
         switch(action){
             case "start":case "restart":startRun(System.nanoTime());break;
             case "pause":engine.pause();clearTouches();break;
@@ -59,16 +64,21 @@ public final class HillClimbView extends View {
         }invalidate();return true;
     }
     public void onHostPause(){suspended=true;engine.pause();clearTouches();lastFrame=0;invalidate();}
-    public void onHostResume(){suspended=false;lastFrame=0;invalidate();}
+    public void onHostResume(){suspended=false;lastFrame=0;if(encounter!=null&&!encounterStarted)startRun(encounter.plan.seed);invalidate();}
     public boolean handleBack(){if(screen.equals("menu"))return false;if(engine.phase==HillClimbEngine.Phase.PLAYING)performAction("pause");else performAction("menu");return true;}
     private void clearTouches(){fingers.clear();pressed="";engine.setControls(0,0);}
     @Override protected void onDetachedFromWindow(){clearTouches();super.onDetachedFromWindow();}
     @Override protected void onSizeChanged(int width,int height,int oldw,int oldh){scale=width/900f;h=height/scale;requestApplyInsets();}
     @Override protected void onDraw(Canvas canvas){
         long now=SystemClock.elapsedRealtimeNanos();float dt=lastFrame==0?0:Math.min(.05f,(now-lastFrame)/1e9f);lastFrame=now;
-        if(!suspended){ambient+=dt;if(screen.equals("play")){engine.update(dt);if(engine.phase==HillClimbEngine.Phase.OVER&&!recorded){host.record((int)engine.distance,engine.coins);recorded=true;}}}
+        if(!suspended){ambient+=dt;if(screen.equals("play")){
+            if(encounter==null||!encounter.isEnding())engine.update(dt);
+            if(encounter!=null){encounter.observe(engine.objectiveProgress(encounter.plan.metric),engine.phase==HillClimbEngine.Phase.OVER);if(encounter.isEnding())clearTouches();}
+            else if(engine.phase==HillClimbEngine.Phase.OVER&&!recorded){host.record((int)engine.distance,engine.coins);recorded=true;}
+        }}
         canvas.save();canvas.scale(scale,scale);buttons.clear();world(canvas);
-        if(screen.equals("menu"))menu(canvas);else{hud(canvas);if(engine.phase==HillClimbEngine.Phase.PAUSED)pause(canvas);else if(engine.phase==HillClimbEngine.Phase.OVER)result(canvas);}
+        if(screen.equals("menu"))menu(canvas);else{hud(canvas);if(engine.phase==HillClimbEngine.Phase.PAUSED)pause(canvas);else if(encounter==null&&engine.phase==HillClimbEngine.Phase.OVER)result(canvas);}
+        if(encounter!=null&&encounterStarted){encounter.draw(canvas,left,top+77,Math.min(480,right-left));if(encounter.isEnding())buttons.clear();}
         canvas.restore();if(!suspended)postInvalidateOnAnimation();
     }
     private void world(Canvas c){
@@ -150,7 +160,9 @@ public final class HillClimbView extends View {
     }
     private void overlay(Canvas c){paint.setColor(0xde0b252b);c.drawRect(0,0,900,h,paint);buttons.clear();}
     private void pause(Canvas c){overlay(c);float y=Math.max(25,(h-280)/2);text(c,"TAKE IN THE VIEW",450,y+18,10,MINT,MONO,Paint.Align.CENTER);text(c,"路还很长，歇一会",450,y+60,31,INK,NORMAL,Paint.Align.CENTER);
-        button(c,"resume",275,y+86,350,49,"继续前进",true);button(c,"restart",275,y+145,168,41,"重新出发",false);button(c,"menu",457,y+145,168,41,"返回车库",false);
+        button(c,"resume",275,y+86,350,49,"继续前进",true);
+        if(encounter!=null)button(c,"menu",275,y+145,350,41,"结束奇遇，返回碰界",false);
+        else{button(c,"restart",275,y+145,168,41,"重新出发",false);button(c,"menu",457,y+145,168,41,"返回车库",false);}
         button(c,"sound",275,y+199,168,34,"声音 "+(host.soundEnabled()?"开":"关"),false);button(c,"haptics",457,y+199,168,34,"触感 "+(host.hapticsEnabled()?"开":"关"),false);
     }
     private void result(Canvas c){overlay(c);float y=Math.max(24,(h-300)/2);text(c,"A LITTLE FURTHER",450,y+14,10,GOLD,MONO,Paint.Align.CENTER);text(c,"风景，下次再往前一点",450,y+55,29,INK,NORMAL,Paint.Align.CENTER);
@@ -159,6 +171,7 @@ public final class HillClimbView extends View {
     }
     private void button(Canvas c,String action,float x,float y,float w,float height,String title,boolean primary){round(c,x,y,w,height,Math.min(16,height/2),primary?MINT:0xcc183e40);text(c,title,x+w/2,y+height/2+5,height>44?15:12,primary?0xff15382f:INK,MEDIUM,Paint.Align.CENTER);buttons.add(new Button(action,x,y,w,height));}
     @Override public boolean onTouchEvent(MotionEvent event){
+        if(encounter!=null&&encounter.isEnding()){clearTouches();return true;}
         int action=event.getActionMasked(),index=event.getActionIndex();float px=event.getX(index)/scale,py=event.getY(index)/scale;
         if(action==MotionEvent.ACTION_DOWN||action==MotionEvent.ACTION_POINTER_DOWN){String hit=hit(px,py);int id=event.getPointerId(index);fingers.put(id,hit);if(!hit.equals("gas")&&!hit.equals("brake"))pressed=hit;controls();invalidate();return true;}
         if(action==MotionEvent.ACTION_MOVE){for(int i=0;i<event.getPointerCount();i++){String old=fingers.get(event.getPointerId(i),"");if(old.equals("gas")||old.equals("brake")||old.isEmpty())fingers.put(event.getPointerId(i),hitPedal(event.getX(i)/scale,event.getY(i)/scale));}controls();invalidate();return true;}
