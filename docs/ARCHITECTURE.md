@@ -2,7 +2,7 @@
 
 ## 应用与模块
 
-这是一个 Android 应用、一个 `:app` Gradle 模块，不是安装两个 APK 的启动器。应用 ID 为 `dev.brickzen.app`，两款游戏在不同 Java 包内运行，分享应用私有目录，但各自维护游戏逻辑与偏好。
+这是一个 Android 应用、一个 `:app` Gradle 模块，四款游戏在不同 Java 包内运行。应用 ID 为 `dev.brickzen.app`，共享应用私有目录，各自维护游戏逻辑与偏好。
 
 | 组件 | 职责 |
 | --- | --- |
@@ -13,8 +13,12 @@
 | `io.github.jeremyjia.stardrift.MainActivity` | 星隙的 Android 生命周期、音效、震动、纪录以及奇遇结果。 |
 | `io.github.jeremyjia.stardrift.GameEngine` | 纯 Java 战斗模拟；按击破目标推进波次，最终 Boss 决定通关。 |
 | `io.github.jeremyjia.stardrift.GameView` | 星空绘制、拖动控制、暂停、三选一升级与结算。 |
+| `dev.brickzen.tabletennis.TableTennisEngine` | 独立三维球路、重力、球网／球台／球拍接触、AI 与 11 分赛。 |
+| `dev.brickzen.tabletennis.TableTennisView/Activity` | 透视投影绘制、单指操控、暂停、前台反馈与纪录。 |
+| `dev.brickzen.blocks.BlocksEngine` | 10×20 方块棋盘、7 袋随机、SRS、暂存、锁定与消行。 |
+| `dev.brickzen.blocks.BlocksView/Activity` | 方块绘制、按钮／手势、暂停、音效和纪录。 |
 
-只有集锦首页 Activity 对外导出。两款游戏 Activity 都是应用内部入口。Manifest 仅申请震动权限，没有网络与 Root 权限。
+只有集锦首页 Activity 对外导出。四款游戏 Activity 都是应用内部入口。Manifest 仅申请震动权限，没有网络与 Root 权限。
 
 ## 两种星隙模式
 
@@ -47,14 +51,18 @@
 | `brickzen` | 原碰界关卡、纪录、设置；新增奇遇局面快照和返回提示。 |
 | `star_drift` | 星隙声音、触感、减少动态、标准航程纪录及奇遇次数。 |
 | `portal_results` | 按 `portal_id` 索引的待领取奇遇结果，消费成功后删除。 |
+| `table_tennis` | 比赛场次、胜场、最长连续回击、AI 难度、声音和触感。 |
+| `blocks` | 最佳分数、消行纪录、开局数、声音和触感。 |
+
+乒乓球与方块均由绘制帧驱动物理／规则引擎，失焦和后台时冻结，返回后由玩家继续。两者仅保存纪录和设置，未保存跨进程的实时比赛／棋盘。乒乓球采用 Canvas 投影三维坐标，不使用 OpenGL；碰撞在三维世界中计算，不由屏幕投影判断。
 
 ## 开发与验证
 
-两套引擎都不依赖 Android，可以用 JDK 17 直接跑 `tests/BrickEngineTest.java` 与 `tests/GameEngineTest.java`。构建环境和命令见仓库 README。
+四套引擎都不依赖 Android，可以用 JDK 17 和 `test.ps1` 直接跑回归。构建环境和命令见仓库 README。
 
 引擎回归重点是障碍反弹与清关、物理更新在交接点真正停止、完整快照往返、随机状态保留、取消不扣命、奖励只发一次，以及波次目标、Boss 终局和暂停。`BalanceProbe` 只做模拟驾驶与种子对照。
 
-最新设备验收结果记录在 [2.2.0.md](verification/2.2.0.md)，此前限时版本保留在 [2.1.0.md](verification/2.1.0.md)，初版记录见 [REPORT.md](verification/REPORT.md)。维护时仍应核对以下流程，并区分已完成的真实运行与未覆盖的故障场景：
+最新设备验收结果记录在 [2.3.0.md](verification/2.3.0.md)，Boss 往返记录见 [2.2.0.md](verification/2.2.0.md)，此前限时版本保留在 [2.1.0.md](verification/2.1.0.md)，初版记录见 [REPORT.md](verification/REPORT.md)。维护时仍应核对以下流程，并区分已完成的真实运行与未覆盖的故障场景：
 
 - 同签名覆盖安装后的原关卡、纪录、外观和挡板设置。
 - 集锦进入、返回两款游戏；挖孔、系统栏和触控布局。

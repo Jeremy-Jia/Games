@@ -19,13 +19,17 @@ New-Item -ItemType Directory -Force -Path $testDirectory | Out-Null
 $sources = @(
     'app\src\main\java\dev\brickzen\app\GameEngine.java',
     'app\src\main\java\io\github\jeremyjia\stardrift\GameEngine.java',
+    'app\src\main\java\dev\brickzen\tabletennis\TableTennisEngine.java',
+    'app\src\main\java\dev\brickzen\blocks\BlocksEngine.java',
     'tests\BrickEngineTest.java',
-    'tests\GameEngineTest.java'
+    'tests\GameEngineTest.java',
+    'tests\TableTennisEngineTest.java',
+    'tests\BlocksEngineTest.java'
 ) | ForEach-Object { Join-Path $PSScriptRoot $_ }
 & $compiler -encoding UTF-8 -d $testDirectory @sources
 if ($LASTEXITCODE -ne 0) { throw "Engine test compilation failed ($LASTEXITCODE)." }
-foreach ($testClass in @('dev.brickzen.app.BrickEngineTest', 'GameEngineTest')) {
+foreach ($testClass in @('dev.brickzen.app.BrickEngineTest', 'GameEngineTest', 'TableTennisEngineTest', 'BlocksEngineTest')) {
     & $runtime -ea -cp $testDirectory $testClass
     if ($LASTEXITCODE -ne 0) { throw "$testClass failed ($LASTEXITCODE)." }
 }
-Write-Output 'PASS: both engine regression suites completed.'
+Write-Output 'PASS: all four engine regression suites completed.'

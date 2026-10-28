@@ -3,4 +3,6 @@
     <!-- Only the temporary selfTest variant includes this runner. -->
     <instrumentation android:name="dev.brickzen.app.CollectionSmokeInstrumentation"
         android:targetPackage="dev.brickzen.app" android:functionalTest="true" />
+    <instrumentation android:name="dev.brickzen.app.CollectionAdditionsInstrumentation"
+        android:targetPackage="dev.brickzen.app" android:functionalTest="true" />
 </manifest>

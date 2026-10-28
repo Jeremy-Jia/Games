@@ -16,5 +16,9 @@
             android:screenOrientation="portrait" android:configChanges="screenSize|uiMode|orientation" />
         <activity android:name="io.github.jeremyjia.stardrift.MainActivity" android:exported="false"
             android:screenOrientation="portrait" android:theme="@style/StarTheme" />
+        <activity android:name="dev.brickzen.tabletennis.TableTennisActivity" android:exported="false"
+            android:screenOrientation="portrait" android:theme="@style/StarTheme" />
+        <activity android:name="dev.brickzen.blocks.BlocksActivity" android:exported="false"
+            android:screenOrientation="portrait" android:theme="@style/StarTheme" />
     </application>
 </manifest>

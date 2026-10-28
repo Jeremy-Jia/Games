@@ -21,11 +21,11 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.Locale;
 
-/** The shared front door. Both games remain independent and use their existing saves. */
+/** Shared front door; each game owns its records and settings. */
 public final class CollectionActivity extends Activity {
     private int background, ink, muted, accent, panel;
     private boolean dark;
-    private TextView brickProgress, starProgress;
+    private final TextView[] records = new TextView[4];
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -55,28 +55,20 @@ public final class CollectionActivity extends Activity {
         LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);
         TextView title=label("碰界",36,ink,false);title.setTypeface(Typeface.create("sans-serif-medium",0));
         heading.addView(title,new LinearLayout.LayoutParams(0,dp(63),1));
-        TextView badge=label("游戏集",11,accent,true);badge.setPadding(dp(13),dp(7),dp(13),dp(7));badge.setBackground(shape(panel,50));
+        TextView badge=label("4 款游戏",11,accent,true);badge.setPadding(dp(13),dp(7),dp(13),dp(7));badge.setBackground(shape(panel,50));
         heading.addView(badge);content.addView(heading);
-        TextView sub=label("不止一种好玩。",16,muted,false);content.addView(sub);space(content,23);
+        TextView sub=label("随手开一局，换个好心情。",15,muted,false);content.addView(sub);space(content,23);
 
-        LinearLayout brickCard=card(panel);brickCard.setContentDescription("进入碰界打砖块");
-        brickCard.addView(new GameArt(this,false),new LinearLayout.LayoutParams(-1,dp(137)));
-        LinearLayout brickText=cardText();
-        brickText.addView(label("01   碰界",23,ink,true));
-        TextView desc=label("几何砖块，安静也上头。",12,muted,false);gap(desc,7);brickText.addView(desc);
-        brickProgress=label("",10,accent,true);gap(brickProgress,16);brickText.addView(brickProgress);
-        brickCard.addView(brickText);content.addView(brickCard);
-        brickCard.setOnClickListener(v->startActivity(new Intent(this,MainActivity.class)));
-        space(content,16);
-
-        LinearLayout starCard=card(0xff0d202c);starCard.setContentDescription("进入星隙太空生存");
-        starCard.addView(new GameArt(this,true),new LinearLayout.LayoutParams(-1,dp(130)));
-        LinearLayout starText=cardText();starText.addView(label("02   星隙",23,0xfff0f7f3,true));
-        TextView starDesc=label("穿过层层弹幕，击败最终守望者。",12,0xff9eafb5,false);gap(starDesc,7);starText.addView(starDesc);
-        starProgress=label("",10,0xffaaf0d6,true);gap(starProgress,16);starText.addView(starProgress);
-        starCard.addView(starText);content.addView(starCard);
-        starCard.setOnClickListener(v->startActivity(new Intent(this,io.github.jeremyjia.stardrift.MainActivity.class)));
-        space(content,20);
+        View brick=gameCard(0,"碰界","打砖块 · 连破与奇遇",panel,ink,muted,accent,
+                "进入碰界打砖块",MainActivity.class);
+        View star=gameCard(1,"星隙","太空生存 · 最终 Boss",0xff102934,0xffedf7f2,0xffafc4c6,0xffa9e9d2,
+                "进入星隙太空生存",io.github.jeremyjia.stardrift.MainActivity.class);
+        View tennis=gameCard(2,"弧线","3D 乒乓球 · 指尖对决",0xff193948,0xfff1f6ed,0xffb3c6cd,0xffe6d8a5,
+                "进入3D乒乓球",dev.brickzen.tabletennis.TableTennisActivity.class);
+        View blocks=gameCard(3,"叠界","俄罗斯方块 · 消行与连击",dark?0xff343044:0xffebe5f2,
+                dark?0xfff0e9f6:0xff463456,dark?0xffc3b2d1:0xff857092,dark?0xffdac2ee:0xff73558d,
+                "进入俄罗斯方块",dev.brickzen.blocks.BlocksActivity.class);
+        gameRow(content,brick,star);space(content,13);gameRow(content,tennis,blocks);space(content,20);
 
         LinearLayout portal=card(dark?0xff302d3d:0xffece8f3);portal.setPadding(dp(19),dp(17),dp(19),dp(17));
         portal.addView(label("✦  砖块里，藏着另一片星空",13,dark?0xffded0f0:0xff6d587d,true));
@@ -87,17 +79,36 @@ public final class CollectionActivity extends Activity {
                 .setPositiveButton("去发现吧",null).show());
         content.addView(portal);space(content,24);
         TextView footer=label("完全离线  ·  无广告  ·  为短暂的空闲而做",10,muted,false);footer.setGravity(Gravity.CENTER);content.addView(footer);
-        space(content,8);TextView version=label("GAMES / 02",9,muted,false);version.setGravity(Gravity.CENTER);version.setLetterSpacing(.18f);content.addView(version);
+        space(content,8);TextView version=label("GAMES / 04",9,muted,false);version.setGravity(Gravity.CENTER);version.setLetterSpacing(.18f);content.addView(version);
     }
 
     @Override protected void onResume(){super.onResume();
-        if(brickProgress==null)return;
+        if(records[0]==null)return;
         SharedPreferences brick=getSharedPreferences("brickzen",MODE_PRIVATE),star=getSharedPreferences("star_drift",MODE_PRIVATE);
-        brickProgress.setText(String.format(Locale.CHINA,"继续第 %d 关    ·    最佳 %,d     ↗",brick.getInt("zen_level",1),brick.getInt("best_zen",0)));
-        starProgress.setText(String.format(Locale.CHINA,"单手生存    ·    最佳 %,d     ↗",star.getInt("best_score",0)));
+        SharedPreferences tennis=getSharedPreferences("table_tennis",MODE_PRIVATE),blocks=getSharedPreferences("blocks",MODE_PRIVATE);
+        records[0].setText(String.format(Locale.CHINA,"第 %d 关 · 最佳 %,d",brick.getInt("zen_level",1),brick.getInt("best_zen",0)));
+        records[1].setText(String.format(Locale.CHINA,"最佳 %,d · 单手生存",star.getInt("best_score",0)));
+        records[2].setText(String.format(Locale.CHINA,"胜场 %d · 连续回球 %d",tennis.getInt("wins",0),tennis.getInt("best_streak",0)));
+        records[3].setText(String.format(Locale.CHINA,"最佳 %,d · 消行 %d",blocks.getInt("best_score",0),blocks.getInt("best_lines",0)));
+    }
+    private View gameCard(int index,String title,String subtitle,int color,int textColor,int secondary,int highlight,
+                          String description,Class<? extends Activity> target){
+        LinearLayout card=card(color);card.setContentDescription(description);card.setMinimumHeight(dp(236));
+        card.addView(new GameArt(this,index),new LinearLayout.LayoutParams(-1,dp(100)));
+        LinearLayout body=new LinearLayout(this);body.setOrientation(1);body.setPadding(dp(15),0,dp(12),dp(18));
+        TextView number=label("0"+(index+1)+"  /  PLAY",8,highlight,true);number.setLetterSpacing(.15f);body.addView(number);
+        TextView name=label(title,23,textColor,true);gap(name,5);body.addView(name);
+        TextView desc=label(subtitle,10,secondary,false);gap(desc,5);desc.setMinHeight(dp(31));body.addView(desc);
+        records[index]=label("",9,highlight,true);records[index].setMinHeight(dp(26));gap(records[index],9);body.addView(records[index]);
+        card.addView(body);card.setOnClickListener(v->startActivity(new Intent(this,target)));return card;
+    }
+    private void gameRow(LinearLayout parent,View first,View second){
+        LinearLayout row=new LinearLayout(this);row.setBaselineAligned(false);
+        row.addView(first,new LinearLayout.LayoutParams(0,-2,1));
+        View spacer=new View(this);row.addView(spacer,new LinearLayout.LayoutParams(dp(13),1));
+        row.addView(second,new LinearLayout.LayoutParams(0,-2,1));parent.addView(row,new LinearLayout.LayoutParams(-1,-2));
     }
     private LinearLayout card(int color){LinearLayout v=new LinearLayout(this);v.setOrientation(1);v.setBackground(shape(color,24));v.setClipToOutline(true);v.setClickable(true);v.setFocusable(true);return v;}
-    private LinearLayout cardText(){LinearLayout v=new LinearLayout(this);v.setOrientation(1);v.setPadding(dp(22),0,dp(22),dp(23));return v;}
     private GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
     private TextView label(String s,int size,int color,boolean strong){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setFontFeatureSettings("kern");t.setTypeface(Typeface.create(strong?"sans-serif-medium":"sans-serif",0));return t;}
     private void gap(View v,int top){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(top);v.setLayoutParams(p);}
@@ -105,11 +116,28 @@ public final class CollectionActivity extends Activity {
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
 
     private final class GameArt extends View {
-        private final boolean space;
+        private final int game;
         private final Paint paint=new Paint(3);private final RectF r=new RectF();private final Path path=new Path();
-        GameArt(Context context,boolean space){super(context);this.space=space;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
-        @Override public void onDraw(Canvas c){super.onDraw(c);c.save();c.scale(getWidth()/340f,getHeight()/137f);
-            if(space){
+        GameArt(Context context,int game){super(context);this.game=game;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        @Override public void onDraw(Canvas c){super.onDraw(c);c.save();float artScale=Math.min(getWidth()/340f,getHeight()/137f);
+            c.translate((getWidth()-340*artScale)/2,(getHeight()-137*artScale)/2);c.scale(artScale,artScale);
+            if(game==2){
+                paint.setColor(0xff102c3b);c.drawCircle(215,55,77,paint);
+                path.reset();path.moveTo(105,26);path.lineTo(239,26);path.lineTo(293,112);path.lineTo(48,112);path.close();
+                paint.setColor(0xff439b96);c.drawPath(path,paint);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2);paint.setColor(0xffd4e6d8);c.drawPath(path,paint);
+                c.drawLine(172,26,170,112,paint);paint.setColor(0xff254854);paint.setStrokeWidth(3);c.drawLine(81,69,263,69,paint);
+                paint.setColor(0xffd9e7db);paint.setStrokeWidth(1);c.drawLine(81,54,263,54,paint);c.drawLine(81,54,81,69,paint);c.drawLine(263,54,263,69,paint);
+                for(int i=0;i<23;i++)c.drawLine(82+i*8,54,82+i*8,69,paint);paint.setStyle(Paint.Style.FILL);
+                paint.setColor(0xffdcb0a3);c.save();c.rotate(-24,124,106);r.set(105,86,143,122);c.drawOval(r,paint);r.set(119,116,128,134);paint.setColor(0xffe5cc99);c.drawRoundRect(r,3,3,paint);c.restore();
+                paint.setColor(0x22000000);c.drawOval(211,65,231,70,paint);paint.setColor(0xfffff5d4);c.drawCircle(221,43,8,paint);paint.setColor(0xffffffff);c.drawCircle(218,40,2,paint);
+            } else if(game==3){
+                int[][] tiles={{1,1,1,0,0,0,0,0},{0,1,0,0,1,1,0,0},{0,0,0,0,1,1,0,0},{0,0,1,0,0,0,0,0},{1,1,1,1,0,0,1,0}};
+                int[] colors={0xffb69bcf,0xff86c5bf,0xffe7bf8c,0xffbdabd9,0xffb7d5a5};
+                for(int row=0;row<tiles.length;row++)for(int col=0;col<8;col++)if(tiles[row][col]!=0){
+                    float x=72+col*24,y=14+row*22;paint.setColor(colors[row]);r.set(x,y,x+21,y+19);c.drawRoundRect(r,3,3,paint);paint.setColor(0x40ffffff);r.set(x+3,y+2,x+18,y+4);c.drawRoundRect(r,1,1,paint);
+                }
+                paint.setColor(dark?0xff70627c:0xffc6b8d2);r.set(72,128,263,130);c.drawRoundRect(r,1,1,paint);
+            } else if(game==1){
                 for(int i=0;i<36;i++){paint.setColor(0x558ebcbf);c.drawCircle((i*67+29)%340,(i*29+19)%135,i%4==0?1.3f:.6f,paint);}
                 paint.setColor(0xff183b48);c.drawCircle(251,50,60,paint);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1);paint.setColor(0xff3c5b65);r.set(167,21,335,81);c.save();c.rotate(-25,251,50);c.drawOval(r,paint);c.restore();paint.setStyle(Paint.Style.FILL);
                 c.save();c.translate(140,71);c.rotate(30);paint.setColor(0x339ce7ca);c.drawCircle(0,0,33,paint);path.reset();path.moveTo(0,-31);path.lineTo(19,22);path.lineTo(0,12);path.lineTo(-19,22);path.close();paint.setColor(0xffeaf8f2);c.drawPath(path,paint);path.reset();path.moveTo(0,-17);path.lineTo(6,8);path.lineTo(-6,8);path.close();paint.setColor(0xff285361);c.drawPath(path,paint);paint.setColor(0xff9df1cf);path.reset();path.moveTo(-5,21);path.lineTo(0,42);path.lineTo(5,21);path.close();c.drawPath(path,paint);c.restore();
