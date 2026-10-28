@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.RectF;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
@@ -15,10 +16,15 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ScrollView;
 import dev.brickzen.blocks.BlocksActivity;
 import dev.brickzen.blocks.BlocksEngine;
 import dev.brickzen.tabletennis.TableTennisActivity;
 import dev.brickzen.tabletennis.TableTennisEngine;
+import dev.brickzen.hillclimb.HillClimbActivity;
+import dev.brickzen.hillclimb.HillClimbEngine;
+import dev.brickzen.range.RangeActivity;
+import dev.brickzen.range.RangeEngine;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -37,7 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /** Native UI/physics smoke test; record fixtures are isolated and all preferences restored. */
 public final class CollectionAdditionsInstrumentation extends Instrumentation {
-    private final String[] preferenceNames={"brickzen","star_drift","portal_results","table_tennis","blocks"};
+    private final String[] preferenceNames={"brickzen","star_drift","portal_results","table_tennis","blocks","hill_climb","target_range"};
     private final Map<String,Map<String,Object>> backup=new LinkedHashMap<>();
     private final List<Activity> activities=new CopyOnWriteArrayList<>(),destroyed=new CopyOnWriteArrayList<>();
     private final List<ActivityMonitor> monitors=new ArrayList<>();
@@ -56,21 +62,23 @@ public final class CollectionAdditionsInstrumentation extends Instrumentation {
                     values.put(entry.getKey(),entry.getValue() instanceof Set?new HashSet<>((Set<?>)entry.getValue()):entry.getValue());
                 backup.put(name,values);
             }
-            output=new File(getTargetContext().getExternalFilesDir(null),"verification-2.3.0");
+            output=new File(getTargetContext().getExternalFilesDir(null),"verification-2.4.0");
             check(output.isDirectory()||output.mkdirs(),"Screenshot directory");
             ActivityMonitor opening=monitor(CollectionActivity.class);
             try(ParcelFileDescriptor command=getUiAutomation().executeShellCommand("am start --display 0 -n dev.brickzen.app/.CollectionActivity");FileInputStream in=new FileInputStream(command.getFileDescriptor())){
                 byte[] bytes=new byte[1024];while(in.read(bytes)!=-1){}
             }
             hall=(CollectionActivity)waitForMonitorWithTimeout(opening,8000);check(hall!=null,"Collection opens");focus(hall);
-            screenshot(hall.findViewById(android.R.id.content),"collection.png");
+            check(getTargetContext().getApplicationInfo().loadLabel(getTargetContext().getPackageManager()).toString().equals("SIX GAMES"),"Application label is SIX GAMES");
+            screenshot(hall.findViewById(android.R.id.content),"collection-top.png");
+            screenshot(onMain(()->scrollContent(hall.findViewById(android.R.id.content))),"collection.png");
             check(onMain(()->find(hall.findViewById(android.R.id.content),"进入3D乒乓球")!=null
                     &&find(hall.findViewById(android.R.id.content),"进入俄罗斯方块")!=null),"Both new collection cards present");
-            onMain(()->{for(String description:new String[]{"进入碰界打砖块","进入星隙太空生存","进入3D乒乓球","进入俄罗斯方块"}){
+            onMain(()->{for(String description:new String[]{"进入碰界打砖块","进入星隙太空生存","进入3D乒乓球","进入俄罗斯方块","进入登山赛车","进入狙击打靶"}){
                 View card=find(hall.findViewById(android.R.id.content),description);
                 check(card!=null&&card.getHeight()>=180*hall.getResources().getDisplayMetrics().density,"Visible full-height card: "+description);
             }return null;});
-            tableTennis();blocks();
+            tableTennis();blocks();hillClimb();targetRange();
         }catch(Throwable problem){failure=problem;}
         finally{
             try{onMain(()->{for(int i=activities.size()-1;i>=0;i--){Activity a=activities.get(i);if(!a.isFinishing()&&!a.isDestroyed())a.finish();}return null;});
@@ -79,7 +87,7 @@ public final class CollectionAdditionsInstrumentation extends Instrumentation {
             try{restore();result.putBoolean("preferences_restored",true);}catch(Throwable restoreFailure){if(failure==null)failure=restoreFailure;}
             for(ActivityMonitor m:monitors)removeMonitor(m);
         }
-        result.putString("stream","\n"+(failure==null?"PASS":"FAIL")+": table tennis + blocks native UI/physics; preferences_restored="
+        result.putString("stream","\n"+(failure==null?"PASS":"FAIL")+": SIX GAMES additions native UI/physics; preferences_restored="
                 +result.getBoolean("preferences_restored")+"\n"+(failure==null?"":Log.getStackTraceString(failure)));
         finish(failure==null?Activity.RESULT_OK:Activity.RESULT_CANCELED,result);
     }
@@ -87,7 +95,7 @@ public final class CollectionAdditionsInstrumentation extends Instrumentation {
     private void tableTennis() throws Exception{
         progress("Opening 3D table tennis through the real collection card");
         ActivityMonitor opening=monitor(TableTennisActivity.class);
-        onMain(()->{check(find(hall.findViewById(android.R.id.content),"进入3D乒乓球").performClick(),"Tennis card click");return null;});
+        clickCard("进入3D乒乓球");
         TableTennisActivity activity=(TableTennisActivity)waitForMonitorWithTimeout(opening,8000);check(activity!=null,"Tennis Activity");focus(activity);
         screenshot(activity.game,"tennis-menu.png");
         onMain(()->{tapAction(activity.game,"start");return null;});
@@ -134,7 +142,7 @@ public final class CollectionAdditionsInstrumentation extends Instrumentation {
     private void blocks() throws Exception{
         progress("Opening falling blocks through its collection card");
         ActivityMonitor opening=monitor(BlocksActivity.class);
-        onMain(()->{check(find(hall.findViewById(android.R.id.content),"进入俄罗斯方块").performClick(),"Blocks card click");return null;});
+        clickCard("进入俄罗斯方块");
         BlocksActivity activity=(BlocksActivity)waitForMonitorWithTimeout(opening,8000);check(activity!=null,"Blocks Activity");focus(activity);
         screenshot(activity.game,"blocks-menu.png");
         onMain(()->{tapAction(activity.game,"start");return null;});
@@ -170,6 +178,97 @@ public final class CollectionAdditionsInstrumentation extends Instrumentation {
         onMain(()->{activity.finish();return null;});focus(hall);result.putBoolean("blocks",true);
     }
 
+    private void hillClimb() throws Exception{
+        progress("Opening landscape hill climbing through its visible collection card");
+        ActivityMonitor opening=monitor(HillClimbActivity.class);clickCard("进入登山赛车");
+        HillClimbActivity activity=(HillClimbActivity)waitForMonitorWithTimeout(opening,8000);check(activity!=null,"Hill climb Activity");focus(activity);
+        await("Landscape race layout",4000,()->onMain(()->activity.game.getWidth()>activity.game.getHeight()));
+        screenshot(activity.game,"hill-menu.png");onMain(()->{tapAction(activity.game,"start");return null;});
+        HillClimbEngine engine=activity.game.engine;
+        await("Race gas pedal",2000,()->onMain(()->activity.game.getActionBounds("gas")!=null));
+        float initialFuel=onMain(()->engine.fuel);
+        onMain(()->{pedal(activity.game,"gas",MotionEvent.ACTION_DOWN);return null;});
+        await("Actual gas hold moves car",8000,()->onMain(()->engine.distance>22&&engine.phase==HillClimbEngine.Phase.PLAYING));
+        screenshot(activity.game,"hill-play.png");
+        onMain(()->{pedal(activity.game,"gas",MotionEvent.ACTION_CANCEL);return null;});
+        check(onMain(()->(Float)field(engine,"throttle")==0&&engine.fuel<initialFuel),"Cancelled touch releases throttle and driving uses fuel");
+        // Hold again when real focus loss occurs: neither pedal may remain stuck after return.
+        onMain(()->{pedal(activity.game,"gas",MotionEvent.ACTION_DOWN);return null;});
+        Activity cover=coverWithHall(activity);float clock=onMain(()->engine.time);SystemClock.sleep(300);
+        check(onMain(()->engine.phase==HillClimbEngine.Phase.PAUSED&&engine.time==clock&&(Float)field(engine,"throttle")==0),"Race background freezes and clears held pedal");
+        onMain(()->{cover.finish();return null;});focus(activity);
+        await("Race resume control",3000,()->onMain(()->activity.game.getActionBounds("resume")!=null));
+        onMain(()->{tapAction(activity.game,"resume");return null;});
+        await("Race resumed",2000,()->onMain(()->engine.time>clock+.1f));
+        int metres=onMain(()->(int)engine.distance);
+        onMain(()->{activity.finish();return null;});restoreHallFocus();
+        check(prefs("hill_climb").getInt("best_distance",0)>=metres,"Leaving race saves best distance");
+        progress("Hill climbing: real pedal >"+metres+"m, fuel use, touch cancellation, landscape focus pause/resume, record passed");
+        result.putBoolean("hill_climb",true);
+    }
+
+    private void targetRange() throws Exception{
+        progress("Opening landscape target range through its visible collection card");
+        ActivityMonitor opening=monitor(RangeActivity.class);clickCard("进入狙击打靶");
+        RangeActivity activity=(RangeActivity)waitForMonitorWithTimeout(opening,8000);check(activity!=null,"Range Activity");focus(activity);
+        await("Landscape range layout",4000,()->onMain(()->activity.game.getWidth()>activity.game.getHeight()));
+        screenshot(activity.game,"range-menu.png");onMain(()->{tapAction(activity.game,"start");return null;});
+        RangeEngine engine=activity.game.engine;
+        await("Range controls",2000,()->onMain(()->activity.game.getActionBounds("fire")!=null));
+        int initialRounds=prefs("target_range").getInt("rounds",0);
+        int oldZoom=onMain(()->engine.zoomIndex);
+        onMain(()->{tapAction(activity.game,"zoom");return null;});check(onMain(()->engine.zoomIndex!=oldZoom),"Zoom touch changes magnification");
+        onMain(()->{pedal(activity.game,"breath",MotionEvent.ACTION_DOWN);return null;});SystemClock.sleep(250);
+        check(onMain(()->engine.holdingBreath&&engine.stamina<1),"Holding breath touch drains stamina");
+        onMain(()->{pedal(activity.game,"breath",MotionEvent.ACTION_UP);return null;});check(onMain(()->!engine.holdingBreath),"Breath releases on finger up");
+        float beforeAim=onMain(()->engine.aimX);
+        onMain(()->{float y=activity.game.getLogicalHeight()*.47f;touch(activity.game,450,y,MotionEvent.ACTION_DOWN);touch(activity.game,472,y,MotionEvent.ACTION_MOVE);touch(activity.game,472,y,MotionEvent.ACTION_UP);return null;});
+        check(onMain(()->Math.abs(engine.aimX-beforeAim)>.005f),"Actual scope drag changes aim");
+        Activity cover=coverWithHall(activity);float clock=onMain(()->engine.time);SystemClock.sleep(300);
+        check(onMain(()->engine.phase==RangeEngine.Phase.PAUSED&&engine.time==clock&&!engine.holdingBreath),"Range background freezes and releases breath");
+        onMain(()->{cover.finish();return null;});focus(activity);
+        await("Range resume control",3000,()->onMain(()->activity.game.getActionBounds("resume")!=null));
+        onMain(()->{tapAction(activity.game,"resume");return null;});
+        for(int shot=1;shot<=10;shot++){
+            if(onMain(()->engine.ammo==0)){
+                onMain(()->{tapAction(activity.game,"reload");return null;});
+                check(onMain(()->engine.reloadRemaining>0),"Reload starts actual timer");
+            }
+            await("Range ready for shot "+shot,4000,()->onMain(engine::canFire));
+            final int expected=shot;
+            // Aim is test input, compensated using the game's fictional flight model; fire/impact stay real.
+            onMain(()->{engine.setAim(engine.aimForTargetX(),engine.aimForTargetY());tapAction(activity.game,"fire");return null;});
+            check(onMain(()->engine.shotsFired==expected),"Fire touch consumes exactly one shot");
+            await("Actual projectile impact",2500,()->onMain(()->engine.pendingImpact<=0));
+            if(shot==3)screenshot(activity.game,"range-play.png");
+            progress("Range shot "+shot+": "+onMain(()->engine.lastRing+" rings, score="+engine.score+", distance="+Math.round(engine.distance)+"m"));
+        }
+        await("Ten-shot round ends",3000,()->onMain(()->engine.phase==RangeEngine.Phase.OVER));
+        check(onMain(()->engine.hits>=8&&engine.score>0),"Static and moving target hit/scoring paths");
+        await("Range record saved",2000,()->prefs("target_range").getInt("rounds",0)==initialRounds+1);
+        SystemClock.sleep(200);check(prefs("target_range").getInt("rounds",0)==initialRounds+1,"Round counted once");
+        screenshot(activity.game,"range-result.png");onMain(()->{activity.finish();return null;});restoreHallFocus();result.putBoolean("target_range",true);
+    }
+
+    private void restoreHallFocus() throws Exception{
+        await("Portrait collection returns",8000,()->onMain(()->{for(Activity activity:activities)if(activity instanceof CollectionActivity
+                &&!activity.isDestroyed()&&!activity.isFinishing()&&activity.hasWindowFocus()){hall=(CollectionActivity)activity;return true;}return false;}));waitForIdleSync();
+    }
+    private void clickCard(String description)throws Exception{
+        onMain(()->{View card=find(hall.findViewById(android.R.id.content),description);check(card!=null,"Card exists: "+description);
+            card.requestRectangleOnScreen(new Rect(0,0,card.getWidth(),card.getHeight()),true);return null;});
+        await("Card scrolled into view",2000,()->onMain(()->{View card=find(hall.findViewById(android.R.id.content),description);Rect visible=new Rect();return card.getGlobalVisibleRect(visible)&&visible.height()>=card.getHeight()*.8f;}));
+        onMain(()->{check(find(hall.findViewById(android.R.id.content),description).performClick(),"Visible card click: "+description);return null;});
+    }
+    private static View scrollContent(View root){if(root instanceof ScrollView)return ((ScrollView)root).getChildAt(0);
+        if(root instanceof ViewGroup)for(int i=0;i<((ViewGroup)root).getChildCount();i++){View found=scrollContent(((ViewGroup)root).getChildAt(i));if(found!=null)return found;}return null;}
+    private float logicalWidth(View view){return view instanceof dev.brickzen.hillclimb.HillClimbView||view instanceof dev.brickzen.range.RangeView?900:400;}
+    private void touch(View view,float x,float y,int action){float scale=view.getWidth()/logicalWidth(view);long now=SystemClock.uptimeMillis();MotionEvent event=MotionEvent.obtain(now,now,action,x*scale,y*scale,0);try{check(view.dispatchTouchEvent(event),"Dispatch touch");}finally{event.recycle();}}
+    private void pedal(View view,String name,int action)throws Exception{
+        RectF bounds=view instanceof dev.brickzen.hillclimb.HillClimbView?((dev.brickzen.hillclimb.HillClimbView)view).getActionBounds(name):((dev.brickzen.range.RangeView)view).getActionBounds(name);
+        check(bounds!=null,"Held control: "+name);touch(view,bounds.centerX(),bounds.centerY(),action);
+    }
+
     private Activity coverWithHall(Activity source)throws Exception{
         ActivityMonitor cover=monitor(CollectionActivity.class);onMain(()->{source.startActivity(new Intent(source,CollectionActivity.class));return null;});
         Activity activity=waitForMonitorWithTimeout(cover,8000);check(activity!=null,"Foreground cover");focus(activity);return activity;
@@ -183,7 +282,7 @@ public final class CollectionAdditionsInstrumentation extends Instrumentation {
         RectF hit=null;
         for(Object button:(List<?>)field(view,"buttons"))if(action.equals(field(button,"id","action"))){hit=(RectF)field(button,"rect","bounds");break;}
         check(hit!=null,"Visible action: "+action);
-        float scale=view.getWidth()/400f;long now=SystemClock.uptimeMillis();
+        float scale=view.getWidth()/logicalWidth(view);long now=SystemClock.uptimeMillis();
         MotionEvent down=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,hit.centerX()*scale,hit.centerY()*scale,0);
         MotionEvent up=MotionEvent.obtain(now,now+12,MotionEvent.ACTION_UP,hit.centerX()*scale,hit.centerY()*scale,0);
         try{check(view.dispatchTouchEvent(down),"Touch down "+action);check(view.dispatchTouchEvent(up),"Touch up "+action);}finally{down.recycle();up.recycle();}

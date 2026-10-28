@@ -2,7 +2,7 @@
 
 ## 应用与模块
 
-这是一个 Android 应用、一个 `:app` Gradle 模块，四款游戏在不同 Java 包内运行。应用 ID 为 `dev.brickzen.app`，共享应用私有目录，各自维护游戏逻辑与偏好。
+这是一个名为 SIX GAMES 的 Android 应用、一个 `:app` Gradle 模块，六款游戏在不同 Java 包内运行。应用 ID 为 `dev.brickzen.app`，共享应用私有目录，各自维护游戏逻辑与偏好。
 
 | 组件 | 职责 |
 | --- | --- |
@@ -17,8 +17,12 @@
 | `dev.brickzen.tabletennis.TableTennisView/Activity` | 透视投影绘制、单指操控、暂停、前台反馈与纪录。 |
 | `dev.brickzen.blocks.BlocksEngine` | 10×20 方块棋盘、7 袋随机、SRS、暂存、锁定与消行。 |
 | `dev.brickzen.blocks.BlocksView/Activity` | 方块绘制、按钮／手势、暂停、音效和纪录。 |
+| `dev.brickzen.hillclimb.HillClimbEngine` | 双轮弹簧接地、车辆俯仰、重力、牵引、燃油、拾取与翻覆。 |
+| `dev.brickzen.hillclimb.HillClimbView/Activity` | 横屏山路、分层背景、车辆绘制、双指踏板、生命周期与纪录。 |
+| `dev.brickzen.range.RangeEngine` | 游戏弹道／飞行时间、呼吸、弹匣、移动靶、命中环数与轮次。 |
+| `dev.brickzen.range.RangeView/Activity` | 横屏靶场、瞄准镜、拖动／屏息／射击、暂停与纪录。 |
 
-只有集锦首页 Activity 对外导出。四款游戏 Activity 都是应用内部入口。Manifest 仅申请震动权限，没有网络与 Root 权限。
+只有集锦首页 Activity 对外导出。六款游戏 Activity 都是应用内部入口。Manifest 仅申请震动权限，没有网络与 Root 权限。赛车与靶场采用横屏并处理尺寸／方向变化，避免被竖屏 Activity 覆盖后丢失当前局面。
 
 ## 两种星隙模式
 
@@ -53,19 +57,23 @@
 | `portal_results` | 按 `portal_id` 索引的待领取奇遇结果，消费成功后删除。 |
 | `table_tennis` | 比赛场次、胜场、最长连续回击、AI 难度、声音和触感。 |
 | `blocks` | 最佳分数、消行纪录、开局数、声音和触感。 |
+| `hill_climb` | 最远距离、单局金币纪录、开局数、声音和触感。 |
+| `target_range` | 最高分、最佳命中率、完成轮次、声音和触感。 |
 
 乒乓球与方块均由绘制帧驱动物理／规则引擎，失焦和后台时冻结，返回后由玩家继续。两者仅保存纪录和设置，未保存跨进程的实时比赛／棋盘。乒乓球采用 Canvas 投影三维坐标，不使用 OpenGL；碰撞在三维世界中计算，不由屏幕投影判断。
 
+赛车使用上限为 50 ms 的帧步长，并拆成约 240 Hz 子步更新双轮弹簧接触；拾取集合保持最多 40 个。按键指针分别跟踪，松手、取消、失焦都会清除踏板输入。打靶先记录射击时的落点，再按游戏飞行时间结算对运动靶的偏移；10 发影响全部结算后结束。两者只持久化纪录与设置，未实现跨进程的实时行驶／瞄准状态。
+
 ## 开发与验证
 
-四套引擎都不依赖 Android，可以用 JDK 17 和 `test.ps1` 直接跑回归。构建环境和命令见仓库 README。
+六套引擎都不依赖 Android，可以用 JDK 17 和 `test.ps1` 直接跑回归。构建环境和命令见仓库 README。
 
 引擎回归重点是障碍反弹与清关、物理更新在交接点真正停止、完整快照往返、随机状态保留、取消不扣命、奖励只发一次，以及波次目标、Boss 终局和暂停。`BalanceProbe` 只做模拟驾驶与种子对照。
 
-最新设备验收结果记录在 [2.3.0.md](verification/2.3.0.md)，Boss 往返记录见 [2.2.0.md](verification/2.2.0.md)，此前限时版本保留在 [2.1.0.md](verification/2.1.0.md)，初版记录见 [REPORT.md](verification/REPORT.md)。维护时仍应核对以下流程，并区分已完成的真实运行与未覆盖的故障场景：
+最新设备验收结果记录在 [2.4.0.md](verification/2.4.0.md)，乒乓球与方块初版见 [2.3.0.md](verification/2.3.0.md)，Boss 往返记录见 [2.2.0.md](verification/2.2.0.md)，此前限时版本保留在 [2.1.0.md](verification/2.1.0.md)，初版记录见 [REPORT.md](verification/REPORT.md)。维护时仍应核对以下流程，并区分已完成的真实运行与未覆盖的故障场景：
 
 - 同签名覆盖安装后的原关卡、纪录、外观和挡板设置。
-- 集锦进入、返回两款游戏；挖孔、系统栏和触控布局。
+- 集锦进入、返回各款游戏；横竖屏、挖孔、系统栏和触控布局。
 - 实际击中神秘砖，完整完成或取消奇遇，回到正确的原局。
 - 锁屏、后台、窗口失焦时暂停及音效停止。
 - 奇遇结果已写入而父 Activity 被重建时补领，重复回调不重复加分。

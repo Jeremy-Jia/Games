@@ -20,5 +20,11 @@
             android:screenOrientation="portrait" android:theme="@style/StarTheme" />
         <activity android:name="dev.brickzen.blocks.BlocksActivity" android:exported="false"
             android:screenOrientation="portrait" android:theme="@style/StarTheme" />
+        <activity android:name="dev.brickzen.hillclimb.HillClimbActivity" android:exported="false"
+            android:screenOrientation="landscape" android:theme="@style/StarTheme"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize" />
+        <activity android:name="dev.brickzen.range.RangeActivity" android:exported="false"
+            android:screenOrientation="landscape" android:theme="@style/StarTheme"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize" />
     </application>
 </manifest>

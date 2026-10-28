@@ -25,7 +25,7 @@ import java.util.Locale;
 public final class CollectionActivity extends Activity {
     private int background, ink, muted, accent, panel;
     private boolean dark;
-    private final TextView[] records = new TextView[4];
+    private final TextView[] records = new TextView[6];
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -53,9 +53,9 @@ public final class CollectionActivity extends Activity {
 
         TextView eyebrow=label("A LITTLE ARCADE",10,accent,true);eyebrow.setLetterSpacing(.20f);content.addView(eyebrow);
         LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title=label("碰界",36,ink,false);title.setTypeface(Typeface.create("sans-serif-medium",0));
+        TextView title=label("SIX GAMES",29,ink,false);title.setTypeface(Typeface.create("sans-serif-medium",0));
         heading.addView(title,new LinearLayout.LayoutParams(0,dp(63),1));
-        TextView badge=label("4 款游戏",11,accent,true);badge.setPadding(dp(13),dp(7),dp(13),dp(7));badge.setBackground(shape(panel,50));
+        TextView badge=label("6 款游戏",11,accent,true);badge.setPadding(dp(13),dp(7),dp(13),dp(7));badge.setBackground(shape(panel,50));
         heading.addView(badge);content.addView(heading);
         TextView sub=label("随手开一局，换个好心情。",15,muted,false);content.addView(sub);space(content,23);
 
@@ -68,7 +68,13 @@ public final class CollectionActivity extends Activity {
         View blocks=gameCard(3,"叠界","俄罗斯方块 · 消行与连击",dark?0xff343044:0xffebe5f2,
                 dark?0xfff0e9f6:0xff463456,dark?0xffc3b2d1:0xff857092,dark?0xffdac2ee:0xff73558d,
                 "进入俄罗斯方块",dev.brickzen.blocks.BlocksActivity.class);
-        gameRow(content,brick,star);space(content,13);gameRow(content,tennis,blocks);space(content,20);
+        View hill=gameCard(4,"野径","登山赛车 · 油门与平衡",dark?0xff3b3830:0xffeee7d5,
+                dark?0xfff2eddf:0xff4c4430,dark?0xffc5bda6:0xff887957,dark?0xffe6cf8d:0xff8c692e,
+                "进入登山赛车",dev.brickzen.hillclimb.HillClimbActivity.class);
+        View range=gameCard(5,"准星","狙击打靶 · 屏息与命中",0xff263b39,0xffeef2df,0xffb0c1ad,0xffd5df9b,
+                "进入狙击打靶",dev.brickzen.range.RangeActivity.class);
+        gameRow(content,brick,star);space(content,13);gameRow(content,tennis,blocks);space(content,13);
+        gameRow(content,hill,range);space(content,20);
 
         LinearLayout portal=card(dark?0xff302d3d:0xffece8f3);portal.setPadding(dp(19),dp(17),dp(19),dp(17));
         portal.addView(label("✦  砖块里，藏着另一片星空",13,dark?0xffded0f0:0xff6d587d,true));
@@ -79,17 +85,20 @@ public final class CollectionActivity extends Activity {
                 .setPositiveButton("去发现吧",null).show());
         content.addView(portal);space(content,24);
         TextView footer=label("完全离线  ·  无广告  ·  为短暂的空闲而做",10,muted,false);footer.setGravity(Gravity.CENTER);content.addView(footer);
-        space(content,8);TextView version=label("GAMES / 04",9,muted,false);version.setGravity(Gravity.CENTER);version.setLetterSpacing(.18f);content.addView(version);
+        space(content,8);TextView version=label("GAMES / 06",9,muted,false);version.setGravity(Gravity.CENTER);version.setLetterSpacing(.18f);content.addView(version);
     }
 
     @Override protected void onResume(){super.onResume();
         if(records[0]==null)return;
         SharedPreferences brick=getSharedPreferences("brickzen",MODE_PRIVATE),star=getSharedPreferences("star_drift",MODE_PRIVATE);
         SharedPreferences tennis=getSharedPreferences("table_tennis",MODE_PRIVATE),blocks=getSharedPreferences("blocks",MODE_PRIVATE);
+        SharedPreferences hill=getSharedPreferences("hill_climb",MODE_PRIVATE),range=getSharedPreferences("target_range",MODE_PRIVATE);
         records[0].setText(String.format(Locale.CHINA,"第 %d 关 · 最佳 %,d",brick.getInt("zen_level",1),brick.getInt("best_zen",0)));
         records[1].setText(String.format(Locale.CHINA,"最佳 %,d · 单手生存",star.getInt("best_score",0)));
         records[2].setText(String.format(Locale.CHINA,"胜场 %d · 连续回球 %d",tennis.getInt("wins",0),tennis.getInt("best_streak",0)));
         records[3].setText(String.format(Locale.CHINA,"最佳 %,d · 消行 %d",blocks.getInt("best_score",0),blocks.getInt("best_lines",0)));
+        records[4].setText(String.format(Locale.CHINA,"最远 %,d m · 金币 %d",hill.getInt("best_distance",0),hill.getInt("best_coins",0)));
+        records[5].setText(String.format(Locale.CHINA,"最佳 %,d · 命中率 %d%%",range.getInt("best_score",0),range.getInt("best_accuracy",0)));
     }
     private View gameCard(int index,String title,String subtitle,int color,int textColor,int secondary,int highlight,
                           String description,Class<? extends Activity> target){
@@ -121,7 +130,17 @@ public final class CollectionActivity extends Activity {
         GameArt(Context context,int game){super(context);this.game=game;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
         @Override public void onDraw(Canvas c){super.onDraw(c);c.save();float artScale=Math.min(getWidth()/340f,getHeight()/137f);
             c.translate((getWidth()-340*artScale)/2,(getHeight()-137*artScale)/2);c.scale(artScale,artScale);
-            if(game==2){
+            if(game==4){
+                path.reset();path.moveTo(25,95);path.lineTo(86,33);path.lineTo(146,84);path.lineTo(205,18);path.lineTo(315,99);path.close();paint.setColor(dark?0xff595747:0xffd6c8a7);c.drawPath(path,paint);
+                path.reset();path.moveTo(15,120);path.cubicTo(69,122,75,111,125,97);path.cubicTo(188,76,236,58,325,67);paint.setStyle(Paint.Style.STROKE);paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeWidth(14);paint.setColor(dark?0xff786b46:0xffb1a06c);c.drawPath(path,paint);paint.setStyle(Paint.Style.FILL);
+                c.save();c.translate(172,75);c.rotate(-18);paint.setColor(0xffe1bd77);r.set(-34,-21,33,1);c.drawRoundRect(r,5,5,paint);path.reset();path.moveTo(-24,-21);path.lineTo(-16,-41);path.lineTo(10,-41);path.lineTo(23,-21);path.close();c.drawPath(path,paint);
+                paint.setColor(0xff344e51);r.set(-12,-36,8,-22);c.drawRoundRect(r,2,2,paint);
+                for(int x:new int[]{-23,23}){paint.setColor(0xff273738);c.drawCircle(x,3,13,paint);paint.setColor(0xffb6b5a1);c.drawCircle(x,3,6,paint);}c.restore();
+            } else if(game==5){
+                for(int i=0;i<3;i++){paint.setColor(new int[]{0xff334d48,0xff41594b,0xff5c7053}[i]);path.reset();path.moveTo(15,123);path.lineTo(60+i*43,51-i*11);path.lineTo(160+i*30,85);path.lineTo(230,29+i*14);path.lineTo(326,117);path.close();c.drawPath(path,paint);}
+                paint.setColor(0xffd7dfba);r.set(199,39,242,107);c.drawRoundRect(r,4,4,paint);paint.setColor(0xff788765);c.drawCircle(220,69,14,paint);paint.setColor(0xffe8d18d);c.drawCircle(220,69,6,paint);
+                paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2);paint.setColor(0xffd5df9b);c.drawCircle(158,68,43,paint);c.drawLine(102,68,148,68,paint);c.drawLine(168,68,214,68,paint);c.drawLine(158,12,158,57,paint);c.drawLine(158,79,158,123,paint);paint.setStyle(Paint.Style.FILL);c.drawCircle(158,68,2,paint);
+            } else if(game==2){
                 paint.setColor(0xff102c3b);c.drawCircle(215,55,77,paint);
                 path.reset();path.moveTo(105,26);path.lineTo(239,26);path.lineTo(293,112);path.lineTo(48,112);path.close();
                 paint.setColor(0xff439b96);c.drawPath(path,paint);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2);paint.setColor(0xffd4e6d8);c.drawPath(path,paint);

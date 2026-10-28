@@ -21,15 +21,19 @@ $sources = @(
     'app\src\main\java\io\github\jeremyjia\stardrift\GameEngine.java',
     'app\src\main\java\dev\brickzen\tabletennis\TableTennisEngine.java',
     'app\src\main\java\dev\brickzen\blocks\BlocksEngine.java',
+    'app\src\main\java\dev\brickzen\hillclimb\HillClimbEngine.java',
+    'app\src\main\java\dev\brickzen\range\RangeEngine.java',
     'tests\BrickEngineTest.java',
     'tests\GameEngineTest.java',
     'tests\TableTennisEngineTest.java',
-    'tests\BlocksEngineTest.java'
+    'tests\BlocksEngineTest.java',
+    'tests\HillClimbEngineTest.java',
+    'tests\RangeEngineTest.java'
 ) | ForEach-Object { Join-Path $PSScriptRoot $_ }
 & $compiler -encoding UTF-8 -d $testDirectory @sources
 if ($LASTEXITCODE -ne 0) { throw "Engine test compilation failed ($LASTEXITCODE)." }
-foreach ($testClass in @('dev.brickzen.app.BrickEngineTest', 'GameEngineTest', 'TableTennisEngineTest', 'BlocksEngineTest')) {
+foreach ($testClass in @('dev.brickzen.app.BrickEngineTest', 'GameEngineTest', 'TableTennisEngineTest', 'BlocksEngineTest', 'HillClimbEngineTest', 'RangeEngineTest')) {
     & $runtime -ea -cp $testDirectory $testClass
     if ($LASTEXITCODE -ne 0) { throw "$testClass failed ($LASTEXITCODE)." }
 }
-Write-Output 'PASS: all four engine regression suites completed.'
+Write-Output 'PASS: all six engine regression suites completed.'
