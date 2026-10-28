@@ -72,7 +72,7 @@ public final class CollectionActivity extends Activity {
         LinearLayout starCard=card(0xff0d202c);starCard.setContentDescription("进入星隙太空生存");
         starCard.addView(new GameArt(this,true),new LinearLayout.LayoutParams(-1,dp(130)));
         LinearLayout starText=cardText();starText.addView(label("02   星隙",23,0xfff0f7f3,true));
-        TextView starDesc=label("一根手指，穿过三分钟的星海。",12,0xff9eafb5,false);gap(starDesc,7);starText.addView(starDesc);
+        TextView starDesc=label("穿过层层弹幕，击败最终守望者。",12,0xff9eafb5,false);gap(starDesc,7);starText.addView(starDesc);
         starProgress=label("",10,0xffaaf0d6,true);gap(starProgress,16);starText.addView(starProgress);
         starCard.addView(starText);content.addView(starCard);
         starCard.setOnClickListener(v->startActivity(new Intent(this,io.github.jeremyjia.stardrift.MainActivity.class)));
@@ -80,10 +80,10 @@ public final class CollectionActivity extends Activity {
 
         LinearLayout portal=card(dark?0xff302d3d:0xffece8f3);portal.setPadding(dp(19),dp(17),dp(19),dp(17));
         portal.addView(label("✦  砖块里，藏着另一片星空",13,dark?0xffded0f0:0xff6d587d,true));
-        TextView portalDesc=label("击中神秘砖块，开启 30 秒奇遇，再带奖励回来。",11,dark?0xffb6a8c4:0xff877592,false);gap(portalDesc,7);portal.addView(portalDesc);
+        TextView portalDesc=label("击中神秘砖块，闯过敌阵与 Boss，带奖励回来。",11,dark?0xffb6a8c4:0xff877592,false);gap(portalDesc,7);portal.addView(portalDesc);
         portal.setContentDescription("了解神秘砖块和跨游戏奇遇");
         portal.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("偶遇另一种好玩")
-                .setMessage("神秘砖会随机藏在砖阵内部，避开最先接触的一排。击中它，会自动切入 30 秒星隙挑战。\n\n三波进攻越来越密，升级自动装配。结束后自动发放奖励、返回碰界并继续打球；存活到结束还会获得宽板和满格能量。\n\n原来的砖块、小球、生命和分数都会保留。随时可主动暂停或提前结束奇遇。")
+                .setMessage("神秘砖会随机藏在砖阵内部，避开最先接触的一排。击中它，会自动切入星隙挑战。\n\n击破四波敌阵，再迎战最终 Boss；没有时间限制，升级自动装配。结束后自动发放奖励、返回碰界并继续打球；击败 Boss 还会获得宽板和满格能量。\n\n砖阵更密，也有改变球路的反弹障碍。原来的砖块、小球、生命和分数都会保留。随时可主动暂停或提前结束奇遇。")
                 .setPositiveButton("去发现吧",null).show());
         content.addView(portal);space(content,24);
         TextView footer=label("完全离线  ·  无广告  ·  为短暂的空闲而做",10,muted,false);footer.setGravity(Gravity.CENTER);content.addView(footer);

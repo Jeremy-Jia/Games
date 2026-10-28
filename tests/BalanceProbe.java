@@ -17,14 +17,14 @@ public final class BalanceProbe {
         }
     }
     private static void challenge(int seed){
-        GameEngine g=new GameEngine(null);g.setBounds(400,890);g.startChallenge(seed,30);
-        float firstUpgrade=-1;int maxEnemies=0;
-        for(int frame=0;frame<60*31 && g.phase==GameEngine.Phase.PLAYING;frame++){
+        GameEngine g=new GameEngine(null);g.setBounds(400,890);g.startChallenge(seed);
+        float firstUpgrade=-1,bossTime=-1;int maxEnemies=0;
+        for(int frame=0;frame<60*300 && g.phase==GameEngine.Phase.PLAYING;frame++){
             float angle=g.time*1.3f;g.setTarget(200+(float)Math.sin(angle)*140,g.height*.55f+(float)Math.cos(angle)*180);
             if(g.pulseCharge>=.999f && g.enemies.size()>3)g.pulse();
-            g.update(1f/60);if(firstUpgrade<0 && g.level>1)firstUpgrade=g.time;maxEnemies=Math.max(maxEnemies,g.enemies.size());
+            g.update(1f/60);if(firstUpgrade<0 && g.level>1)firstUpgrade=g.time;if(bossTime<0 && g.bossSpawned)bossTime=g.time;maxEnemies=Math.max(maxEnemies,g.enemies.size());
         }
-        System.out.printf("seed=%d firstUpgrade=%.1fs phase=%s end=%.1fs hp=%.0f level=%d kills=%.0f maxEnemy=%d%n",seed,firstUpgrade,g.phase,g.time,g.hp,g.level,g.kills,maxEnemies);
+        System.out.printf("seed=%d firstUpgrade=%.1fs phase=%s end=%.1fs hp=%.0f level=%d kills=%.0f wave=%d bossAt=%.1fs maxEnemy=%d%n",seed,firstUpgrade,g.phase,g.time,g.hp,g.level,g.kills,g.getWave(),bossTime,maxEnemies);
     }
     private static void run(int seed, boolean moving, boolean optimalUpgrades) {
         GameEngine g = new GameEngine(null); g.setBounds(400, 890); g.start(seed);

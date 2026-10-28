@@ -11,8 +11,8 @@ android {
         applicationId 'dev.brickzen.app'
         minSdk 26
         targetSdk 36
-        versionCode 8
-        versionName '2.1.0'
+        versionCode 9
+        versionName '2.2.0'
         testInstrumentationRunner 'dev.brickzen.app.CollectionSmokeInstrumentation'
     }
 
@@ -31,10 +31,19 @@ android {
         debug {
             debuggable true
         }
+        selfTest {
+            initWith debug
+            matchingFallbacks = ['debug']
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             signingConfig signingConfigs.debug
         }
+    }
+
+    sourceSets {
+        selfTest.java.srcDir 'src/androidTest/java'
     }
 
     compileOptions {

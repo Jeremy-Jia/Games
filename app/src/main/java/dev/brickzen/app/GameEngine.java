@@ -30,6 +30,8 @@ final class GameEngine implements Serializable {
     final ArrayList<Ball> balls;
     State beforePause;
     final ArrayList<Brick> bricks;
+    // Separate from destructible bricks: gates never enter score, power targeting or clear counts.
+    ArrayList<Brick> obstacles;
     final ArrayList<Burst> bursts;
     float charge;
     boolean cleanupGranted;
@@ -293,6 +295,7 @@ final class GameEngine implements Serializable {
     GameEngine() {
         this.balls = new ArrayList<>();
         this.bricks = new ArrayList<>();
+        this.obstacles = new ArrayList<>();
         this.drops = new ArrayList<>();
         this.events = new ArrayList<>();
         this.orbs = new ArrayList<>();
@@ -315,6 +318,7 @@ final class GameEngine implements Serializable {
     GameEngine(long j) {
         this.balls = new ArrayList<>();
         this.bricks = new ArrayList<>();
+        this.obstacles = new ArrayList<>();
         this.drops = new ArrayList<>();
         this.events = new ArrayList<>();
         this.orbs = new ArrayList<>();
@@ -404,6 +408,7 @@ final class GameEngine implements Serializable {
         this.destroyed = 0;
         this.balls.clear();
         this.bricks.clear();
+        this.obstacles.clear();
         this.drops.clear();
         this.events.clear();
         this.orbs.clear();
@@ -458,168 +463,73 @@ final class GameEngine implements Serializable {
             fNextFloat = this.random.nextFloat() * 170.0f;
             f = 180.0f;
         }
-        this.orbs.add(new Orb(clamp(fNextFloat + f, 110.0f, 860.0f), fMin, this.orbsSpawned % 2 == 0 ? Surprise.LIGHTNING : Surprise.values()[((this.surpriseOffset + (this.orbsSpawned / 2)) % 3) + 1]));
+        float orbX = safeOrbX(clamp(fNextFloat + f, 110.0f, 860.0f), fMin);
+        this.orbs.add(new Orb(orbX, fMin, this.orbsSpawned % 2 == 0 ? Surprise.LIGHTNING : Surprise.values()[((this.surpriseOffset + (this.orbsSpawned / 2)) % 3) + 1]));
         this.orbsSpawned++;
     }
 
-    /* JADX WARN: Code duplicated, block: B:13:0x00fb  */
-    /* JADX WARN: Code duplicated, block: B:26:0x012d  */
-    /* JADX WARN: Code duplicated, block: B:39:0x0173  */
-    /* JADX WARN: Code duplicated, block: B:40:0x017c  */
-    /* JADX WARN: Code duplicated, block: B:43:0x018f  */
-    /* JADX WARN: Code duplicated, block: B:45:0x0194  */
-    /* JADX WARN: Code duplicated, block: B:46:0x0198  */
-    /* JADX WARN: Code duplicated, block: B:49:0x01a9  */
-    /* JADX WARN: Code duplicated, block: B:52:0x01c7  */
-    /* JADX WARN: Code duplicated, block: B:55:0x01ce  */
-    /* JADX WARN: Code duplicated, block: B:60:0x01e1 A[ADDED_TO_REGION] */
-    private void generateLayout() {
-        Shape shape;
-        float fNextFloat;
-        float fNextFloat2;
-        float f;
-        float fMin;
-        float f2;
-        int i;
-        int i2;
-        int i3;
-        int iNextInt = this.random.nextInt(4);
-        if (iNextInt == this.palette) {
-            iNextInt = ((iNextInt + 1) + this.random.nextInt(3)) % 4;
+    private float safeOrbX(float preferred, float y) {
+        if (orbPositionOpen(preferred, y)) return preferred;
+        // Search sideways first, preserving the safe height above the raised paddle.
+        int first = Math.round((preferred - 110) / 32.5f);
+        for (int offset = 1; offset <= 25; offset++) {
+            float candidate = 110 + ((first + offset) % 25) * 32.5f;
+            if (orbPositionOpen(candidate, y)) return candidate;
         }
-        this.palette = iNextInt;
+        return preferred; // Unreachable with at most three gates and one other active orb.
+    }
+
+    private boolean orbPositionOpen(float x, float y) {
+        for (Brick gate : this.obstacles) {
+            float dx = x - clamp(x, gate.x, gate.x + gate.w);
+            float dy = y - clamp(y, gate.y, gate.y + gate.h);
+            if (dx * dx + dy * dy < 40 * 40) return false;
+        }
+        for (Orb orb : this.orbs) {
+            if (orb.active && Math.hypot(x - orb.x, y - orb.y) < 72) return false;
+        }
+        return true;
+    }
+
+    /** Compact masonry with small passages and a few indestructible rebound gates. */
+    private void generateLayout() {
+        int nextPalette = this.random.nextInt(4);
+        if (nextPalette == this.palette) nextPalette = (nextPalette + 1 + this.random.nextInt(3)) % 4;
+        this.palette = nextPalette;
         this.pattern = this.random.nextInt(5);
-        int iNextInt2 = this.random.nextInt(3);
-        int i4 = iNextInt2 + 12;
-        int iNextInt3 = this.random.nextInt(3) + 12;
-        int iNextInt4 = this.random.nextInt(13);
-        float fMin2 = Math.min(1120.0f, (this.height * 0.64f) - 170.0f) - 250.0f;
-        int iMin = Math.min(iNextInt3, Math.max(10, (int) (fMin2 / 34.0f)));
-        float f3 = iMin;
-        float f4 = fMin2 / f3;
-        float f5 = i4;
-        float f6 = 884.0f / f5;
-        int i5 = 1;
-        Shape[] shapeArr = new Shape[][]{new Shape[]{Shape.ROUND, Shape.ROUND, Shape.CAPSULE, Shape.HEXAGON}, new Shape[]{Shape.ROUND, Shape.ROUND, Shape.DISC, Shape.DIAMOND}, new Shape[]{Shape.CAPSULE, Shape.DISC, Shape.HEXAGON, Shape.ROUND}, new Shape[]{Shape.ROUND, Shape.ROUND, Shape.DIAMOND, Shape.HEXAGON}}[this.random.nextInt(4)];
-        int i6 = 0;
-        while (i6 < iMin) {
-            int i7 = 0;
-            while (i7 < i4) {
-                float f7 = i7;
-                int i8 = iNextInt2 + 11;
-                float f8 = (f7 - (i8 / 2.0f)) / (f5 / 2.0f);
-                float f9 = i6;
-                int i9 = iNextInt2;
-                float f10 = (f9 - ((iMin - 1) / 2.0f)) / (f3 / 2.0f);
-                if ((this.pattern != 0 || this.random.nextFloat() >= 0.025f) && (this.pattern != 1 || Math.abs(f8) + Math.abs(f10) <= 1.78f)) {
-                    int i10 = this.pattern;
-                    if (i10 == 2) {
-                        float f11 = (f8 * f8) + (f10 * f10);
-                        if (f11 < 0.025f || f11 > 1.65f) {
-                            i3 = i6;
-                            i = 1;
-                        } else if ((i10 == 3 || (((i6 / 2) + i7) + iNextInt4) % 13 != 0) && !(i10 == 4 && i6 % 2 == 1 && i7 == i8)) {
-                            shape = shapeArr[this.random.nextInt(shapeArr.length)];
-                            fNextFloat = (f6 - 3.0f) * ((this.random.nextFloat() * 0.06f) + 0.94f);
-                            fNextFloat2 = (f4 - 3.0f) * ((this.random.nextFloat() * 0.06f) + 0.94f);
-                            if (shape == Shape.DISC) {
-                                fMin = Math.min(fNextFloat, fNextFloat2);
-                                f = fMin;
-                            } else {
-                                f = fNextFloat2;
-                                fMin = fNextFloat;
-                            }
-                            f2 = (f7 * f6) + 58.0f + ((f6 - fMin) / 2.0f);
-                            if (this.pattern == 4) {
-                                i = 1;
-                                if (i6 % 2 == 1) {
-                                    f2 += f6 / 2.0f;
-                                }
-                            } else {
-                                i = 1;
-                            }
-                            float f12 = f2;
-                            float f13 = (f9 * f4) + 250.0f + ((f4 - f) / 2.0f);
-                            if (this.level >= 2 || this.random.nextFloat() >= Math.min(0.34f, (this.level * 0.018f) + 0.12f)) {
-                                i2 = i;
-                            } else {
-                                i2 = 2;
-                            }
-                            i3 = i6;
-                            this.bricks.add(new Brick(this.bricks.size(), i3, f12, f13, fMin, f, (this.level >= 8 || i2 != 2 || this.random.nextFloat() >= 0.3f) ? i2 : 3, shape, this.random.nextInt(6)));
-                        } else {
-                            i3 = i6;
-                            i = 1;
-                        }
-                    } else if (i10 == 3) {
-                        shape = shapeArr[this.random.nextInt(shapeArr.length)];
-                        fNextFloat = (f6 - 3.0f) * ((this.random.nextFloat() * 0.06f) + 0.94f);
-                        fNextFloat2 = (f4 - 3.0f) * ((this.random.nextFloat() * 0.06f) + 0.94f);
-                        if (shape == Shape.DISC) {
-                            fMin = Math.min(fNextFloat, fNextFloat2);
-                            f = fMin;
-                        } else {
-                            f = fNextFloat2;
-                            fMin = fNextFloat;
-                        }
-                        f2 = (f7 * f6) + 58.0f + ((f6 - fMin) / 2.0f);
-                        if (this.pattern == 4) {
-                            i = 1;
-                            if (i6 % 2 == 1) {
-                                f2 += f6 / 2.0f;
-                            }
-                        } else {
-                            i = 1;
-                        }
-                        float f14 = f2;
-                        float f15 = (f9 * f4) + 250.0f + ((f4 - f) / 2.0f);
-                        if (this.level >= 2) {
-                            i2 = i;
-                        } else {
-                            i2 = i;
-                        }
-                        i3 = i6;
-                        this.bricks.add(new Brick(this.bricks.size(), i3, f14, f15, fMin, f, (this.level >= 8 || i2 != 2 || this.random.nextFloat() >= 0.3f) ? i2 : 3, shape, this.random.nextInt(6)));
-                    } else {
-                        shape = shapeArr[this.random.nextInt(shapeArr.length)];
-                        fNextFloat = (f6 - 3.0f) * ((this.random.nextFloat() * 0.06f) + 0.94f);
-                        fNextFloat2 = (f4 - 3.0f) * ((this.random.nextFloat() * 0.06f) + 0.94f);
-                        if (shape == Shape.DISC) {
-                            fMin = Math.min(fNextFloat, fNextFloat2);
-                            f = fMin;
-                        } else {
-                            f = fNextFloat2;
-                            fMin = fNextFloat;
-                        }
-                        f2 = (f7 * f6) + 58.0f + ((f6 - fMin) / 2.0f);
-                        if (this.pattern == 4) {
-                            i = 1;
-                            if (i6 % 2 == 1) {
-                                f2 += f6 / 2.0f;
-                            }
-                        } else {
-                            i = 1;
-                        }
-                        float f16 = f2;
-                        float f17 = (f9 * f4) + 250.0f + ((f4 - f) / 2.0f);
-                        if (this.level >= 2) {
-                            i2 = i;
-                        } else {
-                            i2 = i;
-                        }
-                        i3 = i6;
-                        this.bricks.add(new Brick(this.bricks.size(), i3, f16, f17, fMin, f, (this.level >= 8 || i2 != 2 || this.random.nextFloat() >= 0.3f) ? i2 : 3, shape, this.random.nextInt(6)));
-                    }
-                } else {
-                    i3 = i6;
-                    i = 1;
-                }
-                i7++;
-                i5 = i;
-                i6 = i3;
-                iNextInt2 = i9;
+        int columns = 16 + this.random.nextInt(3);
+        int rows = 12 + this.random.nextInt(3);
+        float top = 250;
+        float bottom = Math.min(760, Math.min(this.height * .45f, paddleY() - 230));
+        float pitchX = 884f / columns;
+        float pitchY = (bottom - top) / rows;
+        float tileWidth = pitchX - 5;
+        float tileHeight = Math.min(30, pitchY - 5);
+        int passageColumn = 3 + this.random.nextInt(columns - 6);
+        int passageRow = 3 + this.random.nextInt(rows - 6);
+        Shape[] shapes = {Shape.ROUND, Shape.ROUND, Shape.CAPSULE, Shape.HEXAGON, Shape.DIAMOND};
+        for (int row = 0; row < rows; row++) {
+            for (int column = 0; column < columns; column++) {
+                // Open a slim route into the formation without making the board sparse.
+                boolean gap = this.pattern == 0 && row == passageRow && column % 5 == 2
+                        || this.pattern == 1 && column == passageColumn && row % 3 != 0
+                        || this.pattern == 2 && row > 1 && row < rows - 2 && (column + row) % 13 == 0
+                        || this.pattern == 3 && row == passageRow && Math.abs(column - columns / 2) < 2
+                        || this.pattern == 4 && row % 4 == 2 && (column == 3 || column == columns - 4);
+                if (gap) continue;
+                Shape shape = shapes[this.random.nextInt(shapes.length)];
+                float x = 58 + column * pitchX + (pitchX - tileWidth) / 2;
+                float y = top + row * pitchY + (pitchY - tileHeight) / 2;
+                int hp = this.random.nextFloat() < Math.min(.26f, .08f + this.level * .006f) ? 2 : 1;
+                this.bricks.add(new Brick(this.bricks.size(), row, x, y, tileWidth, tileHeight,
+                        hp, shape, (column / 3 + row / 2 + this.random.nextInt(2)) % 6));
             }
-            i6++;
+        }
+        int count = 1 + this.random.nextInt(3);
+        for (int index = 0; index < count; index++) {
+            float x = count == 1 ? 448 : count == 2 ? 238 + index * 420 : 198 + index * 250;
+            float y = bottom + 69 + ((index + this.pattern) % 2) * 31;
+            this.obstacles.add(new Brick(-2 - index, -1, x, y, 104, 28, 1, Shape.CAPSULE, 0));
         }
     }
 
@@ -717,6 +627,21 @@ final class GameEngine implements Serializable {
                         gameEngine.aimAtRemaining(ball);
                     }
                     gameEngine.event(Kind.PADDLE, ball.x, gameEngine.paddleY(), 0, 0, null);
+                }
+                for (Brick obstacle : gameEngine.obstacles) {
+                    if (contact(obstacle, ball.x, ball.y, gameEngine.contact)) {
+                        ball.x += gameEngine.contact.nx * (gameEngine.contact.depth + .2f);
+                        ball.y += gameEngine.contact.ny * (gameEngine.contact.depth + .2f);
+                        float approach = ball.vx * gameEngine.contact.nx + ball.vy * gameEngine.contact.ny;
+                        if (approach < 0) {
+                            ball.vx -= 2 * approach * gameEngine.contact.nx;
+                            ball.vy -= 2 * approach * gameEngine.contact.ny;
+                            gameEngine.normalize(ball);
+                            obstacle.hitAt = gameEngine.time;
+                            gameEngine.event(Kind.WALL, ball.x, ball.y, 0, 0, null);
+                        }
+                        break;
+                    }
                 }
                 for (Brick brick : gameEngine.bricks) {
                     if (brick.hp != 0 && (ball.previousBrick != brick.id || gameEngine.time - ball.lastContact >= 0.11f)) {
@@ -1058,7 +983,7 @@ final class GameEngine implements Serializable {
     }
 
     void hit(Brick brick, boolean z) {
-        if (this.portalActive || brick.hp == 0) {
+        if (this.portalActive || brick.hp == 0 || this.obstacles.contains(brick)) {
             return;
         }
         boolean openPortal = brick.mystery && !this.portalTriggered;
@@ -1243,6 +1168,8 @@ final class GameEngine implements Serializable {
                 Object decoded = input.readObject();
                 if (!(decoded instanceof GameEngine) || input.read() != -1) return null;
                 GameEngine engine = (GameEngine) decoded;
+                // V1 checkpoints written before gates were introduced have no such field.
+                if (engine.obstacles == null) engine.obstacles = new ArrayList<>();
                 return validSnapshot(engine) ? engine : null;
             }
         } catch (IOException | ClassNotFoundException | RuntimeException error) {
@@ -1255,6 +1182,7 @@ final class GameEngine implements Serializable {
                 || engine.portalId == null || engine.portalId.length() > 128
                 || engine.balls == null || engine.balls.size() > 16
                 || engine.bricks == null || engine.bricks.size() > 1024
+                || engine.obstacles == null || engine.obstacles.size() > 3
                 || engine.orbs == null || engine.orbs.size() > 32
                 || engine.bursts == null || engine.bursts.size() > 64
                 || engine.drops == null || engine.drops.size() > 64
@@ -1276,6 +1204,14 @@ final class GameEngine implements Serializable {
             if (brick.mystery) mystery++;
         }
         if (destroyed != engine.destroyed || mystery > 1) return false;
+        for (Brick obstacle : engine.obstacles) {
+            if (obstacle == null || obstacle.shape != Shape.CAPSULE || obstacle.mystery
+                    || obstacle.hp != 1 || obstacle.maxHp != 1 || obstacle.id > -2
+                    || !finite(obstacle.x, obstacle.y, obstacle.w, obstacle.h, obstacle.hitAt)
+                    || obstacle.w <= 0 || obstacle.h <= 0 || obstacle.x < LEFT
+                    || obstacle.x + obstacle.w > RIGHT || obstacle.y < TOP
+                    || obstacle.y + obstacle.h >= engine.height - 100) return false;
+        }
         for (Ball ball : engine.balls) {
             if (ball == null || ball.tx == null || ball.ty == null || ball.tx.length != 18 || ball.ty.length != 18
                     || ball.trailIndex < 0 || ball.trailIndex >= 18 || ball.trailCount < 0 || ball.trailCount > 18

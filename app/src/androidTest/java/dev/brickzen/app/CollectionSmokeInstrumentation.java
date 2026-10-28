@@ -31,7 +31,8 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Device smoke test with no third-party runner. It exercises both real Activities and the
  * draw-loop handoff, then restores every preference entry it touched, including user records.
- * Run only on an unlocked, foreground device; the challenge uses 30 seconds of real gameplay.
+ * Run only on an unlocked, foreground device. A real pilot plays each wave and the final boss;
+ * the wall-clock watchdog belongs only to this test, never to gameplay.
  */
 public final class CollectionSmokeInstrumentation extends Instrumentation {
     private static final String[] PREFERENCE_FILES = {"brickzen", "star_drift", "portal_results"};
@@ -136,6 +137,11 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
         waitForIdleSync();
         onMain(() -> { brickActivity.game.start(true); return null; });
         await("Brick Zen view layout", 5000, () -> onMain(() -> brickActivity.game.getWidth() > 0 && brickActivity.game.getHeight() > 0));
+        onMain(() -> {
+            check(brickActivity.game.engine.bricks.size() >= 170, "Dense board contains many small bricks");
+            check(!brickActivity.game.engine.obstacles.isEmpty(), "Rebound obstacles are present");
+            return null;
+        });
         screenshot(brickActivity.game, "brick-before.png");
 
         ActivityMonitor monitor = starMonitor();
@@ -145,14 +151,16 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
         screenshot((View) field(star, "game"), "star-challenge.png");
         io.github.jeremyjia.stardrift.GameView starView = (io.github.jeremyjia.stardrift.GameView) field(star, "game");
         io.github.jeremyjia.stardrift.GameEngine starEngine = (io.github.jeremyjia.stardrift.GameEngine) field(starView, "game");
-        check(onMain(() -> starEngine.challengeMode && starEngine.runDuration == 30), "Portal launches a 30-second challenge");
+        check(onMain(() -> starEngine.challengeMode && starEngine.getWaveCount() == 5 && !starEngine.bossSpawned), "Portal launches four combat waves followed by a boss");
 
-        long deadline = SystemClock.elapsedRealtime() + 45000;
+        long deadline = SystemClock.elapsedRealtime() + 240000;
         long nextProgress = 0;
+        int highestWave = 1;
+        boolean sawBoss = false;
         boolean won = false;
         while (SystemClock.elapsedRealtime() < deadline) {
             Integer state = onMain(() -> {
-                check(starEngine.phase!=io.github.jeremyjia.stardrift.GameEngine.Phase.UPGRADE,"Short encounter never opens an upgrade dialog");
+                check(starEngine.phase!=io.github.jeremyjia.stardrift.GameEngine.Phase.UPGRADE,"Portal combat never opens an upgrade dialog");
                 float angle=starEngine.time*1.3f;
                 starEngine.setTarget(200+(float)Math.sin(angle)*140,starEngine.height*.55f+(float)Math.cos(angle)*180);
                 if(starEngine.pulseCharge>=.999f && starEngine.enemies.size()>3)starEngine.pulse();
@@ -162,17 +170,29 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
             });
             if (state == 2) { won = true; break; }
             check(state != 3, "Moving pilot failed the reward encounter");
+            int wave = onMain(starEngine::getWave);
+            check(wave >= highestWave, "Combat waves never move backwards");
+            highestWave = wave;
+            if (onMain(() -> starEngine.bossSpawned) && !sawBoss) {
+                check(onMain(() -> starEngine.isBossWave() && starEngine.getWave() == starEngine.getWaveCount()), "Boss appears only in the final wave");
+                sawBoss = true;
+                screenshot(starView, "star-boss.png");
+            }
             if (SystemClock.elapsedRealtime() >= nextProgress) {
-                String status = onMain(() -> "Star challenge running: " + Math.round(starEngine.time)
-                        + "/30 s, wave="+starEngine.getWave()+", level=" + starEngine.level + ", kills="+Math.round(starEngine.kills)+", hp=" + Math.round(starEngine.hp));
+                String status = onMain(() -> "Star combat running: " + Math.round(starEngine.time)
+                        + " s, wave="+starEngine.getWave()+"/"+starEngine.getWaveCount()
+                        + ", objective="+starEngine.getWaveKills()+"/"+starEngine.getWaveTarget()
+                        + ", level=" + starEngine.level + ", kills="+Math.round(starEngine.kills)+", hp=" + Math.round(starEngine.hp)
+                        + ", bossHp=" + bossHp(starEngine));
                 progress(status); nextProgress = SystemClock.elapsedRealtime() + 5000;
             }
             SystemClock.sleep(100);
         }
-        check(won, "Real draw-loop challenge did not finish within 45 seconds");
-        check(onMain(() -> !starEngine.bossSpawned && starEngine.time == 30), "Challenge completed without a boss at exactly 30 seconds");
+        check(won, "Real combat did not defeat the final boss before the test watchdog");
+        check(sawBoss && onMain(() -> starEngine.bossSpawned && starEngine.bossDefeated), "Victory follows a visible final boss defeated through normal combat");
         check(onMain(()->starEngine.level>1),"Automatic upgrades occurred without test input");
         result.putFloat("challenge_seconds", onMain(() -> starEngine.time));
+        result.putBoolean("final_boss_defeated", true);
         screenshot(starView, "star-complete.png");
         int expectedReward = onMain(() -> Math.min(3000, Math.round(starEngine.score * .5f) + 500));
         // No finish/claim/resume tap: production code must return and continue by itself.
@@ -196,6 +216,12 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
         result.putBoolean("success_round_trip", true);
         result.putInt("awarded_score", expectedReward);
         result.putBoolean("duplicate_reward_rejected", true);
+    }
+
+    private static int bossHp(io.github.jeremyjia.stardrift.GameEngine engine) {
+        for (io.github.jeremyjia.stardrift.GameEngine.Enemy enemy : engine.enemies)
+            if (enemy.type == 3) return Math.round(enemy.hp);
+        return 0;
     }
 
     private void testCancelledRoundTrip() throws Exception {
@@ -400,6 +426,7 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
         final int level, lives, score, destroyed;
         final float time, charge, wideUntil;
         final float[][] balls;
+        final float[][] obstacles;
         final int[] brickHp;
         FrozenLevel(GameEngine engine) {
             portalId = engine.portalId; level = engine.level; lives = engine.lives; score = engine.score;
@@ -411,6 +438,11 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
             }
             brickHp = new int[engine.bricks.size()];
             for (int i = 0; i < brickHp.length; i++) brickHp[i] = engine.bricks.get(i).hp;
+            obstacles = new float[engine.obstacles.size()][6];
+            for (int i = 0; i < obstacles.length; i++) {
+                GameEngine.Brick gate = engine.obstacles.get(i);
+                obstacles[i] = new float[]{gate.x, gate.y, gate.w, gate.h, gate.hp, gate.hitAt};
+            }
         }
         void verifyPhysicalState(GameEngine engine) {
             check(level == engine.level && lives == engine.lives && time == engine.time && destroyed == engine.destroyed,
@@ -422,6 +454,14 @@ public final class CollectionSmokeInstrumentation extends Instrumentation {
                         "Original ball position and velocity unchanged");
             }
             for (int i = 0; i < brickHp.length; i++) check(engine.bricks.get(i).hp == brickHp[i], "Original brick HP unchanged");
+            check(engine.obstacles.size() == obstacles.length, "Rebound obstacle count preserved");
+            for (int i = 0; i < obstacles.length; i++) {
+                GameEngine.Brick gate = engine.obstacles.get(i);
+                float[] saved = obstacles[i];
+                check(gate.x == saved[0] && gate.y == saved[1] && gate.w == saved[2]
+                        && gate.h == saved[3] && gate.hp == saved[4] && gate.hitAt == saved[5],
+                        "Rebound obstacle geometry and feedback preserved");
+            }
         }
     }
 }

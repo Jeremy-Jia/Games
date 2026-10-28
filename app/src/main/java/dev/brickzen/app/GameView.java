@@ -562,6 +562,24 @@ final class GameView extends View {
         circle(canvas,cx+(float)Math.cos(angle)*radius*1.65f,cy+(float)Math.sin(angle)*radius*.55f,2.5f,0xfffaf4ff);
     }
 
+    void reboundGate(Canvas canvas, GameEngine.Brick obstacle) {
+        float x=obstacle.x,y=obstacle.y,w=obstacle.w,h=obstacle.h;
+        float flash=Math.max(0,1-(engine.time-obstacle.hitAt)/.22f);
+        int edge=appearance.dark?0xff86c7b7:0xff488674;
+        box(canvas,x,y+4,w,h,h/2,alpha(INK,18));
+        box(canvas,x,y,w,h,h/2,appearance.dark?0xff293c3b:0xffd3ddd4);
+        outline(canvas,x,y,w,h,h/2,edge,2);
+        line(canvas,x+25,y+h/2,x+w-25,y+h/2,alpha(edge,120),2);
+        circle(canvas,x+12,y+h/2,2.7f,edge);
+        circle(canvas,x+w-12,y+h/2,2.7f,edge);
+        if(flash>0) {
+            box(canvas,x,y,w,h,h/2,alpha(edge,(int)(flash*95)));
+            float spread=(1-flash)*11;
+            outline(canvas,x-spread,y-spread,w+spread*2,h+spread*2,h/2+spread,
+                    alpha(edge,(int)(flash*150)),2);
+        }
+    }
+
     void orb(Canvas canvas, float f, float f2, GameEngine.Surprise surprise, float f3) {
         int i = SPECIAL_COLORS[surprise.ordinal()];
         float fSin = (float) Math.sin((this.clock * 3.0f) + surprise.ordinal());
@@ -889,6 +907,7 @@ final class GameView extends View {
                 else gameView.brick(canvas, brick.x, brick.y, brick.w, brick.h, brick.shape, PALETTES[gameView.engine.palette][brick.color], brick.hp, brick.maxHp, 1.0f - ((gameView.engine.time - brick.hitAt) / 0.14f));
             }
         }
+        for (GameEngine.Brick obstacle : gameView.engine.obstacles) gameView.reboundGate(canvas,obstacle);
         for (GameEngine.Orb orb : gameView.engine.orbs) {
             if (orb.active) {
                 gameView.orb(canvas, orb.x, orb.y, orb.type, 1.0f);

@@ -2,33 +2,33 @@
 
 一个完全离线的 Android 小游戏集。保留原来的「碰界」打砖块，加入「星隙 · Star Drift」太空生存，并用神秘砖块串起两种玩法。
 
-版本：**2.1.0**（`versionCode 8`）
+版本：**2.2.0**（`versionCode 9`）
 
 包名：`dev.brickzen.app`
 
 仓库：[Jeremy-Jia/Games](https://github.com/Jeremy-Jia/Games)
 
-[下载当前 APK](releases/Games-2.1.0-release.apk)
+[下载当前 APK](releases/Games-2.2.0-release.apk)
 
-<img src="docs/verification/2.1.0/collection.png" width="230" alt="碰界游戏集入口"> <img src="docs/verification/2.1.0/star-complete.png" width="230" alt="星隙奇遇自动结算"> <img src="docs/verification/2.1.0/brick-return.png" width="230" alt="带奖励返回后自动继续打球">
+<img src="docs/verification/2.2.0/brick-before.png" width="230" alt="小砖阵与反弹障碍"> <img src="docs/verification/2.2.0/star-boss.png" width="230" alt="最终 Boss 战"> <img src="docs/verification/2.2.0/brick-return.png" width="230" alt="带奖励返回后自动继续打球">
 
 ## 两种玩法，一个入口
 
 | 游戏 | 玩法 |
 | --- | --- |
-| 碰界 | 滑动挡板、轻点发球；保留无限模式、挑战模式、几何砖块、道具、连击、音效与触感反馈，以及浅色/深色外观和挡板高度设置。 |
-| 星隙 | 竖屏单手拖动飞船，自动瞄准开火，收集星尘进行三选一升级，蓄能释放冲击波。标准航程约三分钟，最后阶段出现 Boss。 |
-| 神秘砖块 | 每关随机藏在砖阵内部，避开最先接触的一排。击中后自动切入 30 秒星隙奇遇；升级自动装配，结束自动发奖、返回碰界并继续打球。 |
+| 碰界 | 更小、更密的几何砖阵，加入改变球路的反弹障碍；滑动挡板、轻点发球，保留道具、连击、音效、触感、外观和挡板高度设置。 |
+| 星隙 | 单手拖动飞船，自动瞄准开火，收集星尘进行三选一升级，蓄能释放冲击波。消灭六波敌人后迎战最终 Boss，没有通关倒计时。 |
+| 神秘砖块 | 随机藏在砖阵内部，避开最先接触的一排。击中后自动进入星隙，闯过四波敌人与最终 Boss；升级自动装配，结束自动发奖、返回并继续打球。 |
 
-奇遇带回的额外分数限制在 `0–3000` 分。存活到结束，还能获得 14 秒加宽挡板与满格能量；主动取消不会获得奖励，也不会扣除碰界的生命。成功、失败或提前退出都会自动返回原局，不需要领奖或点击继续。
+奇遇带回的额外分数限制在 `0–3000` 分。击败 Boss 还能获得 14 秒加宽挡板与满格能量；主动取消不会获得奖励，也不会扣除碰界的生命。成功、失败或提前退出都会自动返回原局，不需要领奖或点击继续。
 
-2.1 的奇遇分为侦察群、侧翼夹击、弹幕突围三波。开局射速更快，星尘更早吸附，约 5–7 秒得到第一次强化；连破和冲刺预警提供更清晰的战斗反馈。普通三分钟航程仍可手动选择升级，短奇遇则始终保持动作连续。
+2.2 按每波击破目标推进，最后才出现 Boss；不会因到达 30 秒或三分钟自动结束。敌人组合和弹幕逐波增强，界面显示当前目标与 Boss 血条。普通航程保留手动选择升级，奇遇保持连续战斗。障碍不会计入清关目标，也不会被道具消除。
 
 应用没有广告、账号、联网功能或 Root 要求。仅使用震动权限；两款游戏各自保存设置和纪录。集锦入口沿用碰界的外观设置。
 
 ## 安装与存档
 
-发布包位于 `releases/Games-2.1.0-release.apk`；自行构建的 APK 位于 `app/build/outputs/apk/`。
+发布包位于 `releases/Games-2.2.0-release.apk`；自行构建的 APK 位于 `app/build/outputs/apk/`。
 
 集锦继续使用原碰界包名和私有存档名 `brickzen`。**同包名、同签名的覆盖升级**可以保留原来的关卡、纪录与设置。签名不同的 APK 无法直接覆盖，不能通过先卸载来假定存档仍会保留。签名密钥与用户个人存档均不在本仓库中。
 
@@ -88,9 +88,9 @@ java -cp build/engine-tests GameEngineTest
 java -cp build/engine-tests BalanceProbe
 ```
 
-测试覆盖碰界神秘砖块触发、原局快照、奖励只领取一次、取消奇遇、星隙移动/升级/终局，以及 30 秒奖励关的时序。`BalanceProbe` 用固定种子的模拟驾驶观察星隙平衡性，不能替代手动体验。
+测试覆盖密集砖阵与障碍碰撞、随机神秘砖、原局快照、奖励只领取一次、取消奇遇，以及星隙按击破推进、没有超时胜利、最终 Boss 和自动升级。`BalanceProbe` 用固定种子的模拟驾驶观察星隙平衡性，不能替代手动体验。
 
-2026-10-26 已在小米 15 上验证真实 30 秒奇遇，整个流程不点击领奖或继续，返回后小球恢复运动；主动取消与挑战失败也会自动返回，重复结果不会重复发奖。360 组布局验证了随机位置与首排避让。详见 [2.1.0 验收记录](docs/verification/2.1.0.md)；初版恢复与集成记录保留在 [2.0.0 报告](docs/verification/REPORT.md)。
+最新验收见 [2.2.0 记录](docs/verification/2.2.0.md)。此前的小米 15 限时版本记录保留在 [2.1.0](docs/verification/2.1.0.md)，初版恢复与集成记录见 [2.0.0](docs/verification/REPORT.md)。
 
 原生往返测试使用 Android 自带 `Instrumentation`，无需第三方测试依赖：
 
@@ -100,6 +100,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb shell am instrument -w dev.brickzen.app.test/dev.brickzen.app.CollectionSmokeInstrumentation
 ```
+
+部分系统会拦截安装新的测试辅助包。可改用临时 `selfTest` 变体，将同一个测试入口放在游戏自己的调试包内，以相同签名覆盖安装：
+
+```powershell
+.\gradlew.bat assembleSelfTest
+adb install -r app/build/outputs/apk/selfTest/app-selfTest.apk
+adb shell am instrument -w dev.brickzen.app/dev.brickzen.app.CollectionSmokeInstrumentation
+```
+
+测试完成后覆盖安装正常 Release 包即可移除内置测试入口；正式版本不包含测试代码或 instrumentation 声明。
 
 设备须解锁并保持前台。测试会备份三份游戏偏好，在 `finally` 中恢复并逐键核对；它会操作当前应用，请勿与手动游戏同时运行。测试与发布 APK 应使用同一签名，避免卸载造成存档丢失。
 

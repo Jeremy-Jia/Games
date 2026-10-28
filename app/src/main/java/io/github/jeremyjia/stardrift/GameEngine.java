@@ -11,14 +11,19 @@ public final class GameEngine {
     public interface Listener { void onEvent(String name); }
 
     public static final int MAX_ENEMIES = 54, MAX_SHOTS = 128, MAX_GEMS = 100, MAX_PARTICLES = 280;
-    public static final float RUN_SECONDS = 180f, WARNING_SECONDS = 0.7f;
+    public static final float WARNING_SECONDS = 0.7f;
+    /** Kept for callers built against 2.1; neither mode has a time limit. */
+    @Deprecated public static final float RUN_SECONDS = Float.POSITIVE_INFINITY;
+    private static final int[] CHALLENGE_WAVES = {12, 18, 24, 30};
+    private static final int[] STANDARD_WAVES = {18, 24, 30, 36, 42, 48};
     public Phase phase = Phase.PLAYING;
     public float width = 400, height = 850, time, hp, maxHp, xp, xpNext, pulseCharge, kills, score;
     public int level, combo;
     public float shipX, shipY, shipRadius = 9, invulnerable, shield;
     public boolean bossSpawned, bossDefeated;
     public boolean challengeMode;
-    public float runDuration = RUN_SECONDS;
+    @Deprecated public float runDuration = Float.POSITIVE_INFINITY;
+    public float waveStartedAt;
     public long runSeed;
     public final List<Enemy> enemies = new ArrayList<>();
     public final List<Shot> shots = new ArrayList<>();
@@ -61,6 +66,7 @@ public final class GameEngine {
     private float damage, fireRate, magnetRadius, pulseCooldown, moveSpeed, armor, regeneration;
     private boolean targeting;
     private int projectiles, piercing, nextEnemyId;
+    private int waveIndex, waveKills, waveSpawned;
     private final int[] upgradeRanks = new int[8];
 
     public GameEngine(Listener listener) { this.listener = listener; start(1); }
@@ -75,7 +81,7 @@ public final class GameEngine {
 
     public void start(long seed) {
         runSeed = seed; random = new Random(seed);
-        challengeMode = false; runDuration = RUN_SECONDS;
+        challengeMode = false; runDuration = Float.POSITIVE_INFINITY;
         phase = Phase.PLAYING; time = 0; hp = maxHp = 100; shield = 0;
         level = 1; xp = 0; xpNext = 6; pulseCharge = 1;
         kills = score = 0; combo = 0; comboTimer = 0;
@@ -85,19 +91,22 @@ public final class GameEngine {
         damage = 12; fireRate = 6; magnetRadius = 150; pulseCooldown = 14;
         moveSpeed = 340; armor = regeneration = 0; projectiles = 1; piercing = 0;
         nextEnemyId = 1; bossSpawned = bossDefeated = false; lastUpgrade = "";
+        waveIndex = waveKills = waveSpawned = 0; waveStartedAt = 0;
         for (int i = 0; i < upgradeRanks.length; i++) upgradeRanks[i] = 0;
         enemies.clear(); shots.clear(); gems.clear(); particles.clear(); choices.clear();
     }
 
-    /** Short survival encounter, suitable for returning a reward to a host game. */
-    public void startChallenge(long seed, float seconds) {
+    /** A four-wave encounter followed by a final boss; completion is never timed. */
+    public void startChallenge(long seed) {
         start(seed);
         challengeMode = true;
-        runDuration = Float.isFinite(seconds) ? clamp(seconds, 15, 90) : 30;
         spawnTimer = 0.2f;
         projectiles = 2;
         pulseCooldown = 9;
     }
+
+    /** Compatibility overload. The old duration parameter is deliberately ignored. */
+    @Deprecated public void startChallenge(long seed, float ignoredSeconds) { startChallenge(seed); }
 
     public float getFireRate() { return fireRate; }
     public float getDamage() { return damage; }
@@ -105,7 +114,18 @@ public final class GameEngine {
     public float getMagnetRadius() { return magnetRadius; }
     public float getPulseCooldown() { return pulseCooldown; }
     public int getUpgradeCount() { return level - 1; }
-    public int getWave() { return challengeMode ? Math.min(3, 1 + (int)(time / (runDuration / 3))) : Math.min(6, 1 + (int)(time / 30)); }
+    private int[] waveTargets() { return challengeMode ? CHALLENGE_WAVES : STANDARD_WAVES; }
+    public int getWave() { return waveIndex + 1; }
+    public int getWaveCount() { return waveTargets().length + 1; }
+    public boolean isBossWave() { return waveIndex >= waveTargets().length; }
+    public int getWaveKills() { return isBossWave() ? (bossDefeated ? 1 : 0) : waveKills; }
+    public int getWaveTarget() { return isBossWave() ? 1 : waveTargets()[waveIndex]; }
+    public float getWaveProgress() {
+        if (!isBossWave()) return clamp((float)waveKills / getWaveTarget(), 0, 1);
+        if (bossDefeated) return 1;
+        for (Enemy e : enemies) if (e.type == 3) return clamp(1 - e.hp / Math.max(1, e.maxHp), 0, 1);
+        return 0;
+    }
     public int getRank(String id) { int index = upgradeIndex(id); return index < 0 ? 0 : upgradeRanks[index]; }
 
     public void setTarget(float x, float y) {
@@ -128,15 +148,17 @@ public final class GameEngine {
                 shipX += dx / distance * travel; shipY += dy / distance * travel;
             }
         }
+        advanceWave();
         spawnTimer -= dt;
-        if (spawnTimer <= 0 && enemies.size() < MAX_ENEMIES) {
-            spawnEnemy(-1);
-            if ((challengeMode ? getWave() >= 2 && random.nextFloat() < (getWave() == 3 ? .8f : .45f)
-                    : time > 45 && random.nextFloat() < .35f) && enemies.size() < MAX_ENEMIES) spawnEnemy(-1);
-            spawnTimer = challengeMode ? (getWave() == 1 ? .8f : getWave() == 2 ? .55f : .36f)
-                    : Math.max(.38f, 1.05f - time * .004f) * (bossSpawned && !bossDefeated ? 1.3f : 1);
+        if (!isBossWave() && spawnTimer <= 0 && waveSpawned < getWaveTarget() && enemies.size() < MAX_ENEMIES) {
+            spawnEnemy(-1); waveSpawned++;
+            if (getWave() >= 2 && random.nextFloat() < .35f + Math.min(.35f, waveIndex * .1f)
+                    && waveSpawned < getWaveTarget() && enemies.size() < MAX_ENEMIES) {
+                spawnEnemy(-1); waveSpawned++;
+            }
+            spawnTimer = Math.max(.3f, (challengeMode ? .7f : .78f) - waveIndex * .1f);
         }
-        if (!challengeMode && !bossSpawned && time >= 150) { spawnEnemy(3); bossSpawned = true; event("boss"); }
+        if (isBossWave() && !bossSpawned) { spawnEnemy(3); bossSpawned = true; event("boss"); }
         updateEnemies(dt);
         if (phase != Phase.PLAYING) return;
         fireTimer -= dt;
@@ -149,9 +171,16 @@ public final class GameEngine {
         if (phase != Phase.PLAYING) return;
         updateGems(dt);
         updateParticles(dt);
-        if (phase == Phase.PLAYING && time >= runDuration && (challengeMode || bossDefeated)) {
-            if (challengeMode) time = runDuration;
-            phase = Phase.WON; score += 2000 + hp * 10; event("win");
+        if (phase == Phase.PLAYING) advanceWave();
+    }
+
+    private void advanceWave() {
+        if (!isBossWave() && waveKills >= getWaveTarget()) {
+            waveIndex++; waveKills = waveSpawned = 0; waveStartedAt = time;
+            spawnTimer = .45f;
+            // A short repair keeps later waves tense without turning every graze into a restart.
+            hp = Math.min(maxHp, hp + 8);
+            event("wave");
         }
     }
 
@@ -164,16 +193,17 @@ public final class GameEngine {
         e.id = nextEnemyId++; e.type = requestedType;
         if (e.type < 0) {
             float roll = random.nextFloat();
-            e.type = time > (challengeMode ? 12 : 25) && roll < .23f ? 2 : (time > (challengeMode ? 6 : 10) && roll < .52f ? 1 : 0);
+            e.type = waveIndex >= 2 && roll < .25f ? 2 : (waveIndex >= 1 && roll < .55f ? 1 : 0);
         }
         e.r = e.type == 3 ? 31 : e.type == 2 ? 17 : e.type == 1 ? 11 : 10;
-        e.maxHp = e.type == 3 ? 610 : e.type == 2 ? 56 + time * 0.2f : e.type == 1 ? 21 + time * 0.08f : 11 + time * 0.045f;
+        e.maxHp = e.type == 3 ? (challengeMode ? 2400 : 4800)
+                : e.type == 2 ? 66 + waveIndex * 11 : e.type == 1 ? 25 + waveIndex * 4 : 14 + waveIndex * 2;
         e.hp = e.maxHp; e.attackTimer = 1.2f + random.nextFloat() * 1.5f;
         e.wobble = random.nextFloat() * 6.28f; e.chargeTimer = 1.4f;
-        if (e.type == 3) { e.x = width / 2; e.y = 174; }
+        if (e.type == 3) { e.x = width / 2; e.y = 210; }
         else {
             for (int attempt = 0; attempt < 8; attempt++) {
-                int side = random.nextInt(time < (challengeMode ? 3 : 6) ? 1 : 3);
+                int side = random.nextInt(waveIndex == 0 && time < 3 ? 1 : 3);
                 if (side == 0) { e.x = 24 + random.nextFloat() * (width - 48); e.y = 145; }
                 else { e.x = side == 1 ? 14 : width - 14; e.y = 170 + random.nextFloat() * (height - 340); }
                 if (distanceSq(e.x, e.y, shipX, shipY) > 110 * 110) break;
@@ -192,30 +222,32 @@ public final class GameEngine {
             if (e.type == 3) {
                 float desiredX = width / 2 + (float) Math.sin(e.age * 0.6f) * width * 0.28f;
                 e.x += (desiredX - e.x) * dt * 1.4f;
-                e.y += (174 + (float) Math.sin(e.age * 0.9f) * 25 - e.y) * dt;
+                e.y += (210 + (float) Math.sin(e.age * 0.9f) * 25 - e.y) * dt;
                 e.attackTimer -= dt;
                 if (e.attackTimer <= 0) {
-                    for (int b = 0; b < 11; b++) enemyShot(e, e.age * 0.3f + b * 6.283185f / 11, 132, 12);
-                    for(int b=-1;b<=1;b++)enemyShot(e, e.angle + b*.15f, 178, 15);
-                    e.attackTimer = e.hp < e.maxHp * 0.4f ? 1 : 1.4f;
+                    boolean enraged = e.hp < e.maxHp * .4f;
+                    int spokes = enraged ? 14 : 12;
+                    for (int b = 0; b < spokes; b++) enemyShot(e, e.age * .32f + b * 6.283185f / spokes, enraged ? 145 : 132, 12);
+                    for(int b=-1;b<=1;b++)enemyShot(e, e.angle + b*.17f, enraged ? 195 : 180, 15);
+                    e.attackTimer = enraged ? 1 : 1.45f;
                 }
             } else if (e.type == 1) {
                 e.chargeTimer -= dt;
                 if (e.chargeTimer < 0) {
-                    float dashSpeed = challengeMode ? 205 + time : 195 + Math.min(40,time*.3f);
+                    float dashSpeed = 225 + Math.min(60, waveIndex * 13);
                     e.vx = dx / distance * dashSpeed; e.vy = dy / distance * dashSpeed; e.chargeTimer = 2.4f;
                 }
                 if (e.chargeTimer > 1.85f) { e.x += e.vx * dt; e.y += e.vy * dt; }
                 else { e.x += dx / distance * dt * 24; e.y += dy / distance * dt * 24; }
             } else {
-                speed = e.type == 2 ? 28 : (challengeMode ? 53 + time*.8f : 43 + Math.min(30, time*.2f));
+                speed = e.type == 2 ? 30 + waveIndex * 2 : 58 + Math.min(32, waveIndex * 7);
                 e.x += dx / distance * speed * dt; e.y += dy / distance * speed * dt;
                 if (e.type == 2) {
                     e.attackTimer -= dt;
                     if (e.attackTimer <= 0) {
-                        enemyShot(e, e.angle, challengeMode ? 135 : 145, 12);
-                        if(challengeMode && getWave()==3){enemyShot(e,e.angle-.22f,120,10);enemyShot(e,e.angle+.22f,120,10);}
-                        e.attackTimer = challengeMode ? 2 : 2.2f;
+                        enemyShot(e, e.angle, 147 + waveIndex * 4, 12);
+                        if(getWave()>=4){enemyShot(e,e.angle-.24f,128,10);enemyShot(e,e.angle+.24f,128,10);}
+                        e.attackTimer = 1.9f;
                     }
                 }
             }
@@ -295,7 +327,12 @@ public final class GameEngine {
             g.value = e.type == 3 ? 3 : 2; g.vx = (random.nextFloat() - 0.5f) * 70; g.vy = (random.nextFloat() - 0.5f) * 70;
             gems.add(g);
         }
-        if (e.type == 3) { bossDefeated = true; hp = Math.min(maxHp, hp + 30); event("boss_down"); }
+        if (e.type == 3) {
+            bossDefeated = true; hp = Math.min(maxHp, hp + 30); event("boss_down");
+            if (phase == Phase.PLAYING) {
+                phase = Phase.WON; score += 2000 + hp * 10; event("win");
+            }
+        } else waveKills++;
         burst(e.x, e.y, e.type == 3 ? 35 : 12, 0xfff9b583, false);
         event("kill");
     }
@@ -320,7 +357,7 @@ public final class GameEngine {
             } else { g.x += g.vx * dt; g.y += g.vy * dt; g.vx *= 1 - dt * 3; g.vy *= 1 - dt * 3; }
             if (dist < shipRadius + 8) {
                 xp += g.value; score += g.value * 4; gems.remove(i);
-                if (xp >= xpNext && !(challengeMode && time >= runDuration)) { prepareUpgrade(); return; }
+                if (xp >= xpNext && phase == Phase.PLAYING) { prepareUpgrade(); return; }
             } else if (g.age > 32) gems.remove(i);
         }
     }
@@ -340,7 +377,7 @@ public final class GameEngine {
         choices.addAll(pool.subList(0, Math.min(3, pool.size())));
         phase = Phase.UPGRADE;
         if(challengeMode) {
-            // Short cross-game encounters keep moving; each run gets its own build.
+            // Cross-game encounters keep moving; each run gets its own build.
             chooseUpgrade(random.nextInt(choices.size()));
             event("auto_upgrade");
         } else { targeting = false; event("upgrade"); }

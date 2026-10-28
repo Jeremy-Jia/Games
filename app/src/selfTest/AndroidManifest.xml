@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only the temporary selfTest variant includes this runner. -->
+    <instrumentation android:name="dev.brickzen.app.CollectionSmokeInstrumentation"
+        android:targetPackage="dev.brickzen.app" android:functionalTest="true" />
+</manifest>

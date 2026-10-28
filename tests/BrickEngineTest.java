@@ -8,9 +8,86 @@ import java.util.HashSet;
 /** Pure Java regression tests for the recovered brick engine and its star-portal handoff. */
 public final class BrickEngineTest {
     public static void main(String[] args) throws Exception {
-        mysteryPlacement(); physicalPortalPausesAfterBounce(); chainPortalStopsRemainingStrikes();
+        compactLayouts(); orbsAvoidGates(); obstacleBounceAndClear(); obstacleSnapshots(); mysteryPlacement(); physicalPortalPausesAfterBounce(); chainPortalStopsRemainingStrikes();
         checkpointRoundTrip(); rewardIsOnceOnly(); cancelledPortal(); readyPortalAutoLaunch(); lastBrickPortal(); invalidCheckpoints();
         System.out.println("PASS: mystery placement, hit/bounce/freeze, chain freeze, full checkpoint/random, idempotent reward/cancel, final-brick clear, invalid snapshots");
+    }
+
+    private static void compactLayouts() {
+        int minimum=Integer.MAX_VALUE,maximum=0;
+        for(int seed=0;seed<60;seed++)for(float height:new float[]{1280,2000,2250}) {
+            GameEngine engine=new GameEngine(seed);engine.resize(height);engine.setPaddleLift(.36f);
+            engine.start(1+seed,true,0);
+            minimum=Math.min(minimum,engine.total);maximum=Math.max(maximum,engine.total);
+            check(engine.total>=180 && engine.total<=252,"dense layouts retain at least 180 small bricks");
+            float bottom=0;
+            for(GameEngine.Brick brick:engine.bricks) {
+                check(brick.w<=51 && brick.h<=30 && brick.h>=15,"compact tile sizes");
+                check(brick.x>GameEngine.LEFT+GameEngine.RADIUS && brick.x+brick.w<GameEngine.RIGHT-GameEngine.RADIUS,"open side channels");
+                bottom=Math.max(bottom,brick.y+brick.h);
+            }
+            check(engine.obstacles.size()>=1 && engine.obstacles.size()<=3,"one to three rebound gates");
+            for(GameEngine.Brick gate:engine.obstacles) {
+                check(gate.y-bottom>GameEngine.RADIUS*2,"passage below destructible formation");
+                check(engine.paddleY()-(gate.y+gate.h)>GameEngine.RADIUS*3,"gate stays clear of the paddle");
+                for(GameEngine.Brick other:engine.obstacles)if(other!=gate)
+                    check(Math.abs(other.x-gate.x)>gate.w+GameEngine.RADIUS*2,"gates leave traversable gaps");
+            }
+            check(GameEngine.fromSnapshot(engine.snapshot())!=null,"new dense board snapshot remains valid");
+        }
+        System.out.println("Compact layouts: 180 samples, "+minimum+"–"+maximum+" destructible tiles, 1–3 open rebound gates");
+    }
+
+    private static void obstacleBounceAndClear() {
+        for(boolean comet:new boolean[]{false,true}) {
+            GameEngine engine=minimal(false);
+            GameEngine.Brick gate=new GameEngine.Brick(-2,-1,400,700,104,28,1,GameEngine.Shape.CAPSULE,0);
+            engine.obstacles.add(gate);engine.cometUntil=comet?10:0;
+            GameEngine.Ball ball=engine.balls.get(0);ball.x=452;ball.y=741;ball.vx=0;ball.vy=-600;
+            int score=engine.score;engine.tick(1f/120);
+            check(ball.vy>0 && ball.y>gate.y+gate.h,"gate reflects ordinary and comet balls");
+            check(gate.hp==1 && engine.destroyed==0 && engine.score==score,"rebound has no destruction, score or charge");
+            engine.hit(gate,true);check(gate.hp==1 && engine.score==score,"power hits cannot destroy gates");
+            for(GameEngine.Brick brick:engine.bricks)brick.mystery=false;
+            for(GameEngine.Brick brick:engine.bricks)engine.hit(brick,true);
+            check(engine.remaining()==0 && engine.state==GameEngine.State.CLEARED && gate.hp==1,"gates never prevent clearing");
+        }
+    }
+
+    private static void orbsAvoidGates() throws Exception {
+        java.lang.reflect.Method spawn=GameEngine.class.getDeclaredMethod("spawnOrb",boolean.class);spawn.setAccessible(true);
+        for(int seed=0;seed<60;seed++)for(float height:new float[]{1280,2000,2250})for(float lift:new float[]{.12f,.22f,.36f}) {
+            GameEngine engine=new GameEngine(seed);engine.resize(height);engine.setPaddleLift(lift);engine.start(seed+1,true,0);
+            for(int generation=0;generation<4;generation++) {
+                for(GameEngine.Orb orb:engine.orbs) {
+                    for(GameEngine.Brick gate:engine.obstacles) {
+                        float dx=orb.x-GameEngine.clamp(orb.x,gate.x,gate.x+gate.w);
+                        float dy=orb.y-GameEngine.clamp(orb.y,gate.y,gate.y+gate.h);
+                        check(Math.hypot(dx,dy)>=39.99f,"orb stays visibly clear of gates even with raised paddle");
+                    }
+                    for(GameEngine.Orb other:engine.orbs)if(other!=orb)
+                        check(Math.hypot(orb.x-other.x,orb.y-other.y)>=71.99f,"power orbs do not cover each other");
+                }
+                engine.orbs.clear();
+                // Simulate later refill after part of the formation has been cleared.
+                for(GameEngine.Brick brick:engine.bricks)if(brick.row>=10-generation)brick.hp=0;
+                spawn.invoke(engine,true);spawn.invoke(engine,false);
+            }
+        }
+        System.out.println("Orb placement: 540 height/paddle/seed combinations, initial and refilled orbs clear of rebound gates");
+    }
+
+    private static void obstacleSnapshots() throws Exception {
+        GameEngine engine=new GameEngine(83);engine.start(4,true,0);
+        engine.obstacles.get(0).hitAt=.2f;
+        GameEngine copy=GameEngine.fromSnapshot(engine.snapshot());
+        check(copy!=null && copy.obstacles.size()==engine.obstacles.size()
+                && copy.obstacles.get(0).x==engine.obstacles.get(0).x && copy.obstacles.get(0).hitAt==.2f,"gate geometry and feedback survive snapshots");
+        // Emulate the default value Java supplies when an old V1 stream has no obstacles field.
+        engine.obstacles=null;ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        try(ObjectOutputStream output=new ObjectOutputStream(bytes)){output.writeObject(engine);}
+        copy=GameEngine.fromSnapshot("BRICKZEN_PORTAL_V1:"+Base64.getEncoder().encodeToString(bytes.toByteArray()));
+        check(copy!=null && copy.obstacles.isEmpty() && copy.total==engine.total,"legacy V1 checkpoint defaults to no gates without replacing its board");
     }
 
     private static void mysteryPlacement() {
@@ -38,6 +115,7 @@ public final class BrickEngineTest {
     private static GameEngine minimal(boolean lastBrick) {
         GameEngine engine = new GameEngine(123); engine.start(1, false, 200);
         engine.bricks.clear(); engine.balls.clear(); engine.orbs.clear(); engine.bursts.clear(); engine.drops.clear(); engine.events.clear();
+        engine.obstacles.clear();
         GameEngine.Brick mystery = new GameEngine.Brick(0, 0, 400, 400, 100, 40, lastBrick ? 1 : 3);
         mystery.mystery = true; engine.bricks.add(mystery);
         if (!lastBrick) engine.bricks.add(new GameEngine.Brick(1, 0, 100, 300, 100, 40, 3));

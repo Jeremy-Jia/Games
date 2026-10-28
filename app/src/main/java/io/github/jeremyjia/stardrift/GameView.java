@@ -69,8 +69,8 @@ public final class GameView extends View {
         this.host = host;
         this.game = new GameEngine(this::gameEvent);
         if (host.isBonusRun()) {
-            screen="play";game.startChallenge(System.nanoTime(),30);
-            toast="神秘砖块已开启 · 存活 30 秒，带奖励回去";toastTime=5;
+            screen="play";game.startChallenge(System.nanoTime());
+            toast="四波突围，击败最终 Boss · 不限时";toastTime=5;
         }
         setFocusable(true); setClickable(true);
         setContentDescription("星隙，单手太空生存游戏。拖动驾驶，自动射击。顶部暂停，底部释放冲击波。");
@@ -182,7 +182,7 @@ public final class GameView extends View {
         text(c,"DEEP SPACE",47,cy-53,7.5f,MUTED,MONO,Paint.Align.LEFT);
         float infoY=h-bottom-282;
         text(c,"把生路，飞成一道光。",28,infoY,22,WHITE,MEDIUM,Paint.Align.LEFT);
-        text(c,"躲过星群，收集微光，在三分钟里走得更远。",28,infoY+29,11.5f,MUTED,REG,Paint.Align.LEFT);
+        text(c,"逐波突围，收集星尘，迎战最终守望者。",28,infoY+29,11.5f,MUTED,REG,Paint.Align.LEFT);
         line(c,28,infoY+52,372,infoY+52,1,0x253e5962);
         text(c,"最高得分",28,infoY+79,10,MUTED,REG,Paint.Align.LEFT);
         text(c,String.format(Locale.US,"%,d",host.bestScore()),28,infoY+108,24,WHITE,LIGHT,Paint.Align.LEFT);
@@ -191,7 +191,7 @@ public final class GameView extends View {
         text(c,"OFFLINE",370,infoY+106,8,MINT,MONO,Paint.Align.RIGHT);
         button(c,"start",26,h-bottom-143,348,61,"开始航行","arrow",true);
         button(c,"guide",26,h-bottom-70,348,42,"飞行指南",null,false);
-        text(c,"单 手 驾 驶    /    自 动 开 火    /    3 分 钟",200,h-bottom-8,8,MUTED,REG,Paint.Align.CENTER);
+        text(c,"单 手 驾 驶    /    自 动 开 火    /    不 限 时",200,h-bottom-8,8,MUTED,REG,Paint.Align.CENTER);
     }
 
     private void drawHomePlanet(Canvas c,float x,float y,float r) {
@@ -215,11 +215,11 @@ public final class GameView extends View {
     private void arena(Canvas c) {
         // Edge guide remains understated, leaving the playfield uncluttered.
         line(c,22,top+100,378,top+100,.5f,0x193e6871);
-        float waveAge=game.time%(game.challengeMode?game.runDuration/3:30);
-        if(waveAge<2) {
-            float a=Math.min(1,(2-waveAge)*1.5f);
-            String label=game.challengeMode?(game.getWave()==1?"第一波 · 侦察群":game.getWave()==2?"第二波 · 侧翼夹击":"最终波 · 弹幕突围"):("WAVE 0"+game.getWave());
-            text(c,label,200,top+153,16,alpha(MINT,(int)(a*200)),MEDIUM,Paint.Align.CENTER);
+        float waveAge=game.time-game.waveStartedAt;
+        if(waveAge<2.2f) {
+            float a=Math.min(1,(2.2f-waveAge)*1.5f);
+            String label=game.isBossWave()?"最终对决 · 守望者":("WAVE 0"+game.getWave()+" · "+waveName());
+            text(c,label,200,top+181,16,alpha(game.isBossWave()?RED:MINT,(int)(a*220)),MEDIUM,Paint.Align.CENTER);
         }
         for(GameEngine.Gem g:game.gems) {
             float pulse=(float)Math.sin(ambient*3+g.age)*.7f;
@@ -318,9 +318,9 @@ public final class GameView extends View {
 
     private void hud(Canvas c) {
         round(c,18,top+2,364,84,18,0xe70b1923);
-        text(c,"存活",32,top+24,9,MUTED,REG,Paint.Align.LEFT);
+        text(c,"航行时间",32,top+24,9,MUTED,REG,Paint.Align.LEFT);
         text(c,clock(game.time),32,top+52,25,WHITE,LIGHT,Paint.Align.LEFT);
-        text(c,"/ "+clock(game.runDuration),103,top+51,10,MUTED,MONO,Paint.Align.LEFT);
+        text(c,game.isBossWave()?"FINAL BOSS":"WAVE 0"+game.getWave(),113,top+49,9,game.isBossWave()?RED:MINT,MONO,Paint.Align.LEFT);
         text(c,String.format(Locale.US,"%,d",Math.round(game.score)),291,top+42,21,WHITE,MEDIUM,Paint.Align.RIGHT);
         text(c,"得分",291,top+60,9,MUTED,REG,Paint.Align.RIGHT);
         circleButton(c,"pause",349,top+34,"pause",false);
@@ -331,7 +331,16 @@ public final class GameView extends View {
         float xp=Math.min(1,game.xp/Math.max(1,game.xpNext));
         text(c,"LV "+game.level,23,top+108,9,MINT,MONO,Paint.Align.LEFT);
         round(c,65,top+102,313,2,1,0xff1c343f);round(c,65,top+102,313*xp,2,1,MINT);
-        if(game.combo>=3)text(c,game.combo+" 连破",377,top+128,10,GOLD,MEDIUM,Paint.Align.RIGHT);
+        if(game.isBossWave()) {
+            text(c,"守望者",24,top+127,10,RED,MEDIUM,Paint.Align.LEFT);
+            float remaining=1-game.getWaveProgress();
+            text(c,Math.round(remaining*100)+"%",377,top+127,9,RED,MONO,Paint.Align.RIGHT);
+            round(c,24,top+135,353,4,2,0xff3b2931);
+            round(c,24,top+135,353*remaining,4,2,RED);
+        } else {
+            text(c,waveName()+" · 击破 "+game.getWaveKills()+" / "+game.getWaveTarget(),24,top+128,10,MUTED,REG,Paint.Align.LEFT);
+            if(game.combo>=3)text(c,game.combo+" 连破",377,top+128,10,GOLD,MEDIUM,Paint.Align.RIGHT);
+        }
         float bY=h-bottom-65;
         boolean ready=game.pulseCharge>=.999f;
         round(c,111,bY,178,51,25,ready?0xffa8eed6:0xe8142935);
@@ -343,9 +352,10 @@ public final class GameView extends View {
         if(game.time<13 && game.phase==GameEngine.Phase.PLAYING) {
             text(c,"拖动任意位置驾驶 · 松手悬停",200,bY-25,10,MUTED,REG,Paint.Align.CENTER);
         } else {
-            text(c,game.challengeMode?"WAVE "+game.getWave()+"/3 · 自动升级 · 结束自动返回":game.time>=150?"最终信号  /  消灭守望者":"击破 "+Math.round(game.kills)+"  ·  星尘会自动吸附",200,bY-22,9,MUTED,REG,Paint.Align.CENTER);
+            text(c,game.isBossWave()?"击败最终守望者"+(game.challengeMode?" · 自动带奖励返回":" · 完成航程")
+                    :"第 "+game.getWave()+" / "+(game.getWaveCount()-1)+" 波"+(game.challengeMode?" · 自动装配升级":" · 收集星尘强化")+" · 不限时",200,bY-22,9,MUTED,REG,Paint.Align.CENTER);
         }
-        float progress=Math.min(1,game.time/game.runDuration);
+        float progress=Math.min(1,(game.getWave()-1+game.getWaveProgress())/game.getWaveCount());
         round(c,22,h-bottom-1,356,2,1,0xff19313b);round(c,22,h-bottom-1,356*progress,2,1,0xff49786f);
     }
 
@@ -434,7 +444,7 @@ public final class GameView extends View {
         text(c,"第一段航程",44,y+47,26,WHITE,LIGHT,Paint.Align.LEFT);
         text(c,"一根手指，就能穿过星海。",44,y+76,12,MUTED,REG,Paint.Align.LEFT);
         String[] titles={"拖动驾驶，自动开火","收集星尘，选择进化","蓄满能量，释放冲击波"};
-        String[] bodies={"在战场任意位置按住拖动。飞船会跟随移动，松手悬停。", "消灭敌人后靠近绿色星尘。升级时战场暂停，挑一项强化。", "点击底部按钮清除附近弹幕。坚持三分钟，击败最终守望者。"};
+        String[] bodies={"在战场任意位置按住拖动。飞船会跟随移动，松手悬停。", "消灭敌人后靠近绿色星尘。升级时战场暂停，挑一项强化。", "消灭每波敌人后继续前进，最后迎战守望者。没有时间限制。"};
         for(int i=0;i<3;i++) {
             float yy=y+111+i*88;
             ring(c,57,yy+18,14,1,0xff44665f);text(c,"0"+(i+1),57,yy+22,10,MINT,MONO,Paint.Align.CENTER);
@@ -451,6 +461,19 @@ public final class GameView extends View {
         else if(name.equals("pulse")){pulseWave=1;shake=3;}
         else if(name.equals("upgrade")){touchDriving=false;game.releaseTarget();}
         else if(name.equals("kill") && game.combo>=3){shake=Math.min(2.4f,.7f+game.combo*.1f);}
+        else if(name.equals("wave")){toast=game.isBossWave()?"最终信号已锁定 · 守望者接近":"下一波 · "+waveName();toastTime=2.2f;}
+        else if(name.equals("boss")){toast="守望者登场 · 留意旋转弹幕";toastTime=3;shake=3;}
+    }
+
+    private String waveName() {
+        switch(game.getWave()) {
+            case 1:return "侦察群";
+            case 2:return "侧翼夹击";
+            case 3:return "装甲猎手";
+            case 4:return "弹幕突围";
+            case 5:return "引力风暴";
+            default:return "边境决战";
+        }
     }
 
     private void startGame() {
